@@ -12,7 +12,8 @@ import NotificationsPage from './pages/NotificationsPage';
 import NotFound from './pages/NotFound';
 import { Loader2 } from 'lucide-react';
 import { Toaster } from "@/components/ui/toaster";
-
+import { ThemeProvider } from '@/components/theme_provider';
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const queryClient = new QueryClient();
 
@@ -21,7 +22,6 @@ function AppLayout() {
 
   if (loading) {
     return (
-
       <div className="flex min-h-screen items-center justify-center bg-background">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
@@ -36,11 +36,35 @@ function AppLayout() {
     <SidebarProvider>
       <div className="min-h-screen flex w-full">
         <AppSidebar onSignOut={signOut} />
+
         <div className="flex-1 flex flex-col min-w-0">
-          <header className="h-14 flex items-center border-b border-border bg-card shrink-0 px-4">
-            <SidebarTrigger />
-            <span className="ml-3 text-sm font-medium text-foreground">TaskFlow</span>
+
+          {/* HEADER */}
+          <header className="h-14 flex items-center justify-between border-b border-border bg-card px-4">
+
+            {/* LEFT SIDE */}
+            <div className="flex items-center gap-3">
+              <SidebarTrigger />
+              <span className="text-sm font-semibold tracking-wide text-foreground">
+                TaskFlow
+              </span>
+            </div>
+
+            {/* RIGHT SIDE */}
+            <div className="flex items-center gap-4">
+
+              {/* USER NAME */}
+              <span className="text-sm text-muted-foreground font-medium">
+                {user?.email?.split("@")[0]}
+              </span>
+
+              {/* THEME TOGGLE */}
+              <ThemeToggle />
+
+            </div>
+
           </header>
+
           <main className="flex-1 overflow-hidden">
             <Routes>
               <Route path="/" element={<Index />} />
@@ -49,6 +73,7 @@ function AppLayout() {
               <Route path="*" element={<NotFound />} />
             </Routes>
           </main>
+
         </div>
       </div>
     </SidebarProvider>
@@ -57,13 +82,15 @@ function AppLayout() {
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <AppLayout />
-      </BrowserRouter>
-    </TooltipProvider>
+    <ThemeProvider>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <AppLayout />
+        </BrowserRouter>
+      </TooltipProvider>
+    </ThemeProvider>
   </QueryClientProvider>
 );
 

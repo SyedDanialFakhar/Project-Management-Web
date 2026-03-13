@@ -112,14 +112,15 @@ export function KanbanBoard({ projectId }: { projectId: string }) {
         </DndContext>
       </div>
 
-      {hasNextPage && (
-        <div className="flex justify-center pb-4">
-          <Button variant="ghost" size="sm" onClick={() => fetchNextPage()} disabled={isFetchingNextPage}>
-            {isFetchingNextPage ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-            Load More
-          </Button>
-        </div>
-      )}
+     
+{hasNextPage && tasks.length > 0 && (
+  <div className="flex justify-center pb-4">
+    <Button variant="ghost" size="sm" onClick={() => fetchNextPage()} disabled={isFetchingNextPage}>
+      {isFetchingNextPage ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+      Load More
+    </Button>
+  </div>
+)}
 
       <TaskModal
         open={modalOpen}
