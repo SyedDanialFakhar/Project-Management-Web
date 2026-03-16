@@ -2,8 +2,8 @@ import { useEffect, useRef } from "react";
 import { useAuth } from '@/hooks/useAuth';
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from '@/lib/supabaseClient';
-import PacmanLeaderboard from "@/components/PacmanLeaderboard";
-
+import PacmanLeaderboard from "@/components/PacmanLeaderBoard";
+//updated the code the case sensitivity
 export default function GamePage() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
