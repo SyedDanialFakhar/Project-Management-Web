@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Pac-Man Game</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="game-wrapper">
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="overlay-ui">
+      <div id="hud">
+        <div class="hud-group">
+          <span class="hud-label">Score</span>
+          <span id="hud-score" class="hud-value">0</span>
+        </div>
+        <div class="hud-group">
+          <span class="hud-label">Level</span>
+          <span id="hud-level" class="hud-value">1</span>
+        </div>
+        <div class="hud-group hud-right">
+          <span class="hud-label">High Score</span>
+          <span id="hud-highscore" class="hud-value">0</span>
+        </div>
+      </div>
+
+      <div id="lives-container"></div>
+
+      <div id="hint">
+        Arrow keys to move · P = Pause · R = Restart · F = Fullscreen
+      </div>
+
+      <div id="start-screen" class="screen">
+        <h1>Pac-Man</h1>
+        <p>Eat all dots, avoid ghosts, use power pellets to turn them blue.</p>
+        <button id="start-button" class="btn">Click or press Enter to start</button>
+        <p class="screen-sub">Controls: Arrow keys · P = Pause · R = Restart · F = Fullscreen</p>
+      </div>
+
+      <div id="pause-screen" class="screen">
+        <h1>Paused</h1>
+        <p>Press P to resume.</p>
+      </div>
+
+      <div id="gameover-screen" class="screen">
+        <h1 id="gameover-title">Game Over</h1>
+        <p id="gameover-text"></p>
+        <button id="restart-button" class="btn">Restart</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/utils.js"></script>
+  <script src="js/maze.js"></script>
+  <script src="js/pacman.js"></script>
+  <script src="js/ghosts.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

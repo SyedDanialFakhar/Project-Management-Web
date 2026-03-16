@@ -14,6 +14,7 @@ import { Loader2 } from 'lucide-react';
 import { Toaster } from "@/components/ui/toaster";
 import { ThemeProvider } from '@/components/theme_provider';
 import { ThemeToggle } from "@/components/theme-toggle";
+import GamePage from "./pages/GamePage";
 
 const queryClient = new QueryClient();
 
@@ -71,9 +72,9 @@ function AppLayout() {
               <Route path="/project/:id" element={<ProjectPage />} />
               <Route path="/notifications" element={<NotificationsPage />} />
               <Route path="*" element={<NotFound />} />
+              <Route path="/game" element={<GamePage />} />
             </Routes>
           </main>
-
         </div>
       </div>
     </SidebarProvider>

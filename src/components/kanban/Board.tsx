@@ -17,7 +17,7 @@ const COLUMNS: { id: TaskStatus; title: string }[] = [
 ];
 
 export function KanbanBoard({ projectId }: { projectId: string }) {
-  const { data, updateTaskStatus, createTask, updateTask, deleteTask, fetchNextPage, hasNextPage, isFetchingNextPage } = useTasks(projectId);
+  const { data: tasks = [], updateTaskStatus, createTask, updateTask, deleteTask, isLoading } = useTasks(projectId);
   const { data: users } = useUsers();
 
   const [activeTask, setActiveTask] = useState<Task | null>(null);
@@ -25,7 +25,6 @@ export function KanbanBoard({ projectId }: { projectId: string }) {
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [defaultStatus, setDefaultStatus] = useState<TaskStatus>('todo');
 
-  const tasks = useMemo(() => data?.pages.flatMap(page => page.data) || [], [data]);
 
   const userMap = useMemo(() => {
     const map: Record<string, string> = {};
