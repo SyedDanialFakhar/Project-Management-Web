@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useAuth } from '@/hooks/useAuth';
 import { useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/lib/supabaseclient";
+import { supabase } from "@/lib/supabaseClient";
 import PacmanLeaderboard from "@/components/PacmanLeaderboard";
 
 export default function GamePage() {
