@@ -79,7 +79,7 @@ export function useTasks(projectId: string) {
       if (assigned_to) {
         await createNotification(
           assigned_to,
-          You have been assigned a new task "${data.title}".
+          `You have been assigned a new task "${data.title}".`
         );
       }
   

@@ -21,7 +21,7 @@ const items = [
   { title: 'Notifications', url: '/notifications', icon: Bell },
 
   /* NEW GAME BUTTON */
-  { title: 'Game', url: '/game', icon: Gamepad2 }
+  { title: 'Game', url: '/game', icon: Gamepad2 },
   { title: 'Analytics', url: '/analytics', icon: LayoutDashboard }
 ];
 
