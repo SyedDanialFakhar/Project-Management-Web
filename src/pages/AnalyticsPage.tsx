@@ -1,71 +1,67 @@
-import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
-
-import StatsCards from "@/components/analytics/StatsCards";
-import AnalyticsChart from "@/components/analytics/AnalyticsChart";
-import LogsTable from "@/components/analytics/LogsTable";
+import { useState } from 'react';
+import { format, subDays } from 'date-fns';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Download } from 'lucide-react';
+import StatsCards from '@/components/analytics/StatsCards';
+import AnalyticsChart from '@/components/analytics/AnalyticsChart';
+import LogsTable from '@/components/analytics/LogsTable';
+import { useAnalyticsData } from '@/hooks/useAnalyticsData'; // ← see hook below
 
 export default function AnalyticsPage() {
-  const [logs, setLogs] = useState<any[]>([]);
-  const [cursor, setCursor] = useState<string | null>(null);
+  const [dateRange, setDateRange] = useState({
+    from: format(subDays(new Date(), 30), 'yyyy-MM-dd'),
+    to: format(new Date(), 'yyyy-MM-dd'),
+  });
 
-  const fetchLogs = async () => {
-    const { data } = await supabase
-      .from("analytics_logs")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(20);
-
-    setLogs(data || []);
-    setCursor(data?.[data.length - 1]?.created_at || null);
-  };
-
-  const loadMore = async () => {
-    if (!cursor) return;
-
-    const { data } = await supabase
-      .from("analytics_logs")
-      .select("*")
-      .lt("created_at", cursor)
-      .order("created_at", { ascending: false })
-      .limit(20);
-
-    if (data?.length) {
-      setLogs((prev) => [...prev, ...data]);
-      setCursor(data[data.length - 1].created_at);
-    }
-  };
-
-  useEffect(() => {
-    fetchLogs();
-
-    const channel = supabase
-      .channel("analytics")
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "analytics_logs",
-        },
-        (payload) => {
-          setLogs((prev) => [payload.new, ...prev]);
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, []);
+  const { logs, isLoading, loadMore, exportToCSV } = useAnalyticsData(dateRange);
 
   return (
-    <div className="p-6 space-y-6">
-      <h1 className="text-xl font-semibold">Analytics Dashboard</h1>
+    <div className="container mx-auto py-8 px-4 md:px-6 max-w-7xl space-y-10">
+      {/* Header + Controls */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+        <div>
+          <h1 className="text-3xl md:text-4xl font-bold tracking-tight">Analytics Dashboard</h1>
+          <p className="text-muted-foreground mt-1.5">Monitor projects, tasks and game activity</p>
+        </div>
 
-      <StatsCards logs={logs} />
-      <AnalyticsChart logs={logs} />
-      <LogsTable logs={logs} loadMore={loadMore} />
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground whitespace-nowrap">From</span>
+            <Input
+              type="date"
+              value={dateRange.from}
+              onChange={e => setDateRange(prev => ({ ...prev, from: e.target.value }))}
+              className="w-40"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground whitespace-nowrap">To</span>
+            <Input
+              type="date"
+              value={dateRange.to}
+              onChange={e => setDateRange(prev => ({ ...prev, to: e.target.value }))}
+              className="w-40"
+            />
+          </div>
+          <Button variant="outline" size="sm" onClick={exportToCSV}>
+            <Download className="h-4 w-4 mr-2" />
+            Export CSV
+          </Button>
+        </div>
+      </div>
+
+      {isLoading && logs.length === 0 ? (
+        <div className="flex justify-center items-center min-h-[60vh]">
+          <div className="animate-pulse text-muted-foreground text-lg">Loading analytics data...</div>
+        </div>
+      ) : (
+        <div className="space-y-10">
+          <StatsCards logs={logs} />
+          <AnalyticsChart logs={logs} />
+          <LogsTable logs={logs} onLoadMore={loadMore} hasMore={!!logs.length} />
+        </div>
+      )}
     </div>
   );
 }

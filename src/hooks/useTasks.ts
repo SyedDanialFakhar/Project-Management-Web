@@ -1,26 +1,25 @@
-// hooks/useTasks.ts
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabaseClient';
 import type { Task, TaskStatus } from '@/types/database.types';
 import { useEffect } from 'react';
-import { logEvent } from "@/lib/analytics";
+import { logEvent } from '@/lib/analytics';
 
-export function useTasks(projectId: string) {
+export function useTasks(projectId: string | undefined) {
   const queryClient = useQueryClient();
 
   const createNotification = async (userId: string, message: string) => {
+    if (!userId) return;
     await supabase.from('notifications').insert({
       user_id: userId,
       message,
       is_read: false,
-      created_at: new Date(),
     });
   };
 
-  // SIMPLE QUERY - loads ALL tasks (perfect for Kanban)
   const query = useQuery({
     queryKey: ['tasks', projectId],
     queryFn: async () => {
+      if (!projectId) return [];
       const { data, error } = await supabase
         .from('tasks')
         .select('*')
@@ -32,10 +31,11 @@ export function useTasks(projectId: string) {
     enabled: !!projectId,
   });
 
-  // Realtime (now safe)
+  // Realtime – fixed channel name to prevent conflicts
   useEffect(() => {
+    if (!projectId) return;
     const channel = supabase
-      .channel(`tasks-${projectId}`)
+      .channel(`tasks-realtime-${projectId}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'tasks', filter: `project_id=eq.${projectId}` },
@@ -46,10 +46,10 @@ export function useTasks(projectId: string) {
     return () => supabase.removeChannel(channel);
   }, [projectId, queryClient]);
 
-  // === Mutations (unchanged) ===
   const createTask = useMutation({
     mutationFn: async ({ title, description, assigned_to, due_date }: any) => {
-  
+      if (!projectId) throw new Error("No project selected");
+
       const { data, error } = await supabase
         .from('tasks')
         .insert({
@@ -58,36 +58,31 @@ export function useTasks(projectId: string) {
           project_id: projectId,
           assigned_to,
           status: 'todo',
-          created_at: new Date(),
-          due_date: due_date ? new Date(due_date) : null
+          due_date: due_date ? new Date(due_date) : null,
         })
         .select()
         .single();
-  
+
       if (error) throw error;
-  
-      // ✅ GET CURRENT USER (THIS IS WHAT YOU ASKED ABOUT)
-      const { data: userData } = await supabase.auth.getUser();
-      const userId = userData?.user?.id;
-  
-      // ✅ LOG ANALYTICS
-      if (userId) {
-        await logEvent(userId, "task_created", 1);
+
+      // Get correct internal user ID
+      const { data: authUser } = await supabase.auth.getUser();
+      if (authUser?.user) {
+        const { data: userRow } = await supabase
+          .from('users')
+          .select('id')
+          .eq('auth_id', authUser.user.id)
+          .single();
+        if (userRow) await logEvent(userRow.id, "task_created", 1);
       }
-  
-      // notification (your existing logic)
+
       if (assigned_to) {
-        await createNotification(
-          assigned_to,
-          `You have been assigned a new task "${data.title}".`
-        );
+        await createNotification(assigned_to, `You have been assigned a new task "${data.title}".`);
       }
-  
+
       return data;
     },
-  
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ['tasks', projectId] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tasks', projectId] }),
   });
 
   const updateTask = useMutation({
@@ -120,11 +115,5 @@ export function useTasks(projectId: string) {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tasks', projectId] }),
   });
 
-  return {
-    ...query,                 // data is now just Task[] (no pages)
-    createTask,
-    updateTask,
-    updateTaskStatus,
-    deleteTask,
-  };
+  return { ...query, createTask, updateTask, updateTaskStatus, deleteTask };
 }
