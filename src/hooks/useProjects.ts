@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabaseClient';
 import type { Project } from '@/types/database.types';
+import { logEvent } from "@/lib/analytics";
 
 export function useProjects(authUserId: string | undefined) {
   const queryClient = useQueryClient();
@@ -45,9 +46,8 @@ export function useProjects(authUserId: string | undefined) {
         })
         .select()
         .single();
-
       if (projectError) throw projectError;
-
+      await logEvent(userUUID, "project_created", 1);
       // notification
       const { error: notifError } = await supabase
         .from('notifications')
