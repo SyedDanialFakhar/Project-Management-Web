@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabaseClient';
 import type { Task, TaskStatus } from '@/types/database.types';
 import { useEffect } from 'react';
+import { logEvent } from "@/lib/analytics";
 
 export function useTasks(projectId: string) {
   const queryClient = useQueryClient();
@@ -48,15 +49,45 @@ export function useTasks(projectId: string) {
   // === Mutations (unchanged) ===
   const createTask = useMutation({
     mutationFn: async ({ title, description, assigned_to, due_date }: any) => {
+  
       const { data, error } = await supabase
         .from('tasks')
-        .insert({ title, description, project_id: projectId, assigned_to, status: 'todo', created_at: new Date(), due_date: due_date ? new Date(due_date) : null })
-        .select().single();
+        .insert({
+          title,
+          description,
+          project_id: projectId,
+          assigned_to,
+          status: 'todo',
+          created_at: new Date(),
+          due_date: due_date ? new Date(due_date) : null
+        })
+        .select()
+        .single();
+  
       if (error) throw error;
-      if (assigned_to) await createNotification(assigned_to, `You have been assigned a new task "${data.title}".`);
+  
+      // ✅ GET CURRENT USER (THIS IS WHAT YOU ASKED ABOUT)
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData?.user?.id;
+  
+      // ✅ LOG ANALYTICS
+      if (userId) {
+        await logEvent(userId, "task_created", 1);
+      }
+  
+      // notification (your existing logic)
+      if (assigned_to) {
+        await createNotification(
+          assigned_to,
+          You have been assigned a new task "${data.title}".
+        );
+      }
+  
       return data;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tasks', projectId] }),
+  
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ['tasks', projectId] }),
   });
 
   const updateTask = useMutation({
