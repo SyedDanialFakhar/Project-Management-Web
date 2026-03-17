@@ -6,7 +6,7 @@ import { Download } from 'lucide-react';
 import StatsCards from '@/components/analytics/StatsCards';
 import AnalyticsChart from '@/components/analytics/AnalyticsChart';
 import LogsTable from '@/components/analytics/LogsTable';
-import { useAnalyticsData } from '@/hooks/useAnalyticsData'; // ← see hook below
+import { useAnalyticsData } from '@/hooks/useAnalyticsData';
 
 export default function AnalyticsPage() {
   const [dateRange, setDateRange] = useState({
@@ -14,7 +14,7 @@ export default function AnalyticsPage() {
     to: format(new Date(), 'yyyy-MM-dd'),
   });
 
-  const { logs, isLoading, loadMore, exportToCSV } = useAnalyticsData(dateRange);
+  const { logs, isLoading, loadMore, hasMore, exportToCSV } = useAnalyticsData(dateRange); // ✅ added hasMore
 
   return (
     <div className="container mx-auto py-8 px-4 md:px-6 max-w-7xl space-y-10">
@@ -22,7 +22,7 @@ export default function AnalyticsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
         <div>
           <h1 className="text-3xl md:text-4xl font-bold tracking-tight">Analytics Dashboard</h1>
-          <p className="text-muted-foreground mt-1.5">Monitor projects, tasks and game activity</p>
+          <p className="text-muted-foreground mt-1.5">Monitor projects, tasks and other activity</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-4">
@@ -59,7 +59,11 @@ export default function AnalyticsPage() {
         <div className="space-y-10">
           <StatsCards logs={logs} />
           <AnalyticsChart logs={logs} />
-          <LogsTable logs={logs} onLoadMore={loadMore} hasMore={!!logs.length} />
+          <LogsTable
+            logs={logs}
+            loadMore={loadMore}   // ✅ was onLoadMore, now loadMore
+            hasMore={hasMore}     // ✅ now comes from hook, not !!logs.length
+          />
         </div>
       )}
     </div>

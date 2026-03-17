@@ -10,7 +10,7 @@ import { Plus, FolderKanban, Loader2 } from 'lucide-react';
 
 export default function DashboardPage() {
   const { user } = useAuth();
-  const { data: projects, isLoading, createProject } = useProjects(user?.id);
+  const { data: projects, isLoading, createProject, deleteProject } = useProjects(user?.id); // ✅ added deleteProject here
   const [modalOpen, setModalOpen] = useState(false);
   const navigate = useNavigate();
 
@@ -41,7 +41,6 @@ export default function DashboardPage() {
         </div>
 
       ) : projects?.length === 0 ? (
-        /* Empty state */
         <div className="flex flex-col items-center justify-center py-28 text-center border border-dashed rounded-2xl bg-muted/20">
           <div className="h-16 w-16 rounded-2xl bg-muted flex items-center justify-center mb-4">
             <FolderKanban className="h-8 w-8 text-muted-foreground/60" />
@@ -57,14 +56,13 @@ export default function DashboardPage() {
         </div>
 
       ) : (
-        /* Grid */
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {projects?.map((project) => (
             <ProjectCard
               key={project.id}
               project={project}
               onClick={() => navigate(`/project/${project.id}`)}
-              onDelete={() => deleteProject.mutateAsync(project.id)}
+              onDelete={() => deleteProject.mutateAsync(project.id)} // ✅ now works
             />
           ))}
           <NewProjectCard onClick={() => setModalOpen(true)} />

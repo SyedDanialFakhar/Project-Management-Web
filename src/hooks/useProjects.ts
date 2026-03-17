@@ -80,5 +80,4 @@ export function useProjects(authUserId: string | undefined) {
   // add to return
   return { ...query, createProject, deleteProject };
 
-  return { ...query, createProject };
 }

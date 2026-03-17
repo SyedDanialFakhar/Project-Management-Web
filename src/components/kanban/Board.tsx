@@ -1,14 +1,8 @@
 import { useMemo, useState, useCallback } from 'react';
 import {
-  DndContext,
-  DragOverlay,
-  closestCorners,
-  PointerSensor,
-  KeyboardSensor,
-  useSensor,
-  useSensors,
-  DragStartEvent,
-  DragEndEvent,
+  DndContext, DragOverlay, closestCorners,
+  PointerSensor, KeyboardSensor, useSensor, useSensors,
+  DragStartEvent, DragEndEvent,
 } from '@dnd-kit/core';
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import type { Task, TaskStatus } from '@/types/database.types';
@@ -18,7 +12,7 @@ import { TaskModal } from './TaskModal';
 import { useTasks } from '@/hooks/useTasks';
 import { useUsers } from '@/hooks/useUsers';
 import { Button } from '@/components/ui/button';
-import { Plus } from 'lucide-react';
+import { Plus, Loader2 } from 'lucide-react';
 
 const COLUMNS: { id: TaskStatus; title: string }[] = [
   { id: 'todo', title: 'To Do' },
@@ -30,16 +24,14 @@ export function KanbanBoard({ projectId }: { projectId: string }) {
   const { data: tasks = [], updateTaskStatus, createTask, updateTask, deleteTask, isLoading } = useTasks(projectId);
   const { data: users = [] } = useUsers();
 
-  const [activeTask, setActiveTask] = useState<Task | null>(null);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [activeTask, setActiveTask]     = useState<Task | null>(null);
+  const [modalOpen, setModalOpen]       = useState(false);
+  const [editingTask, setEditingTask]   = useState<Task | null>(null);
   const [defaultStatus, setDefaultStatus] = useState<TaskStatus>('todo');
 
   const userMap = useMemo(() => {
     const map: Record<string, string> = {};
-    users.forEach(u => {
-      if (u.id && u.name) map[u.id] = u.name;
-    });
+    users.forEach(u => { if (u.id && u.name) map[u.id] = u.name; });
     return map;
   }, [users]);
 
@@ -56,69 +48,42 @@ export function KanbanBoard({ projectId }: { projectId: string }) {
   const handleDragEnd = (event: DragEndEvent) => {
     setActiveTask(null);
     const { active, over } = event;
-
     if (!over) return;
 
-    const activeId = active.id as string;
-    const overId = over.id as string;
-
-    const task = tasks.find(t => t.id === activeId);
+    const task = tasks.find(t => t.id === active.id);
     if (!task) return;
 
-    // Dropped on a column
-    const isOverColumn = COLUMNS.some(col => col.id === overId);
-    if (isOverColumn && task.status !== overId) {
-      updateTaskStatus.mutate({ taskId: activeId, status: overId as TaskStatus });
+    const isOverColumn = COLUMNS.some(col => col.id === over.id);
+    if (isOverColumn && task.status !== over.id) {
+      updateTaskStatus.mutate({ taskId: active.id as string, status: over.id as TaskStatus });
       return;
     }
 
-    // Dropped on another task (reorder within same column - optional future enhancement)
-    const overTask = tasks.find(t => t.id === overId);
+    const overTask = tasks.find(t => t.id === over.id);
     if (overTask && task.status !== overTask.status) {
-      updateTaskStatus.mutate({ taskId: activeId, status: overTask.status });
+      updateTaskStatus.mutate({ taskId: active.id as string, status: overTask.status });
     }
   };
 
-  const handleAdd = useCallback((status: TaskStatus) => {
-    setEditingTask(null);
-    setDefaultStatus(status);
-    setModalOpen(true);
-  }, []);
+  const handleAdd    = useCallback((status: TaskStatus) => { setEditingTask(null); setDefaultStatus(status); setModalOpen(true); }, []);
+  const handleEdit   = useCallback((task: Task) => { setEditingTask(task); setDefaultStatus(task.status); setModalOpen(true); }, []);
+  const handleDelete = useCallback((taskId: string) => { deleteTask.mutate({ taskId }); }, [deleteTask]);
 
-  const handleEdit = useCallback((task: Task) => {
-    setEditingTask(task);
-    setDefaultStatus(task.status);
-    setModalOpen(true);
-  }, []);
-
-  const handleDelete = useCallback((taskId: string) => {
-    deleteTask.mutate({ taskId });
-  }, [deleteTask]);
-
-  const handleSave = useCallback(
-    (taskData: {
-      title: string;
-      description: string;
-      status: TaskStatus;
-      due_date: string | null;
-      assigned_to: string | null;
-    }) => {
-      if (editingTask) {
-        updateTask.mutate({ taskId: editingTask.id, ...taskData });
-      } else {
-        createTask.mutate(taskData);
-      }
-      setModalOpen(false);
-    },
-    [editingTask, updateTask, createTask],
-  );
+  const handleSave = useCallback((taskData: any) => {
+    if (editingTask) {
+      updateTask.mutate({ taskId: editingTask.id, ...taskData });
+    } else {
+      createTask.mutate(taskData);
+    }
+    setModalOpen(false);
+  }, [editingTask, updateTask, createTask]);
 
   if (isLoading) {
     return (
       <div className="flex h-full items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-          <p className="text-muted-foreground">Loading tasks...</p>
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">Loading tasks...</p>
         </div>
       </div>
     );
@@ -127,16 +92,20 @@ export function KanbanBoard({ projectId }: { projectId: string }) {
   return (
     <>
       <div className="flex h-full w-full flex-col">
-        {/* Optional: Add header or controls row here if needed */}
-        <div className="flex items-center justify-between px-6 py-4 border-b">
-          <h2 className="text-xl font-semibold">Project Tasks</h2>
-          <Button onClick={() => handleAdd('todo')}>
-            <Plus className="mr-2 h-4 w-4" />
+        {/* Board header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b bg-background/80 backdrop-blur-sm">
+          <div>
+            <h2 className="text-lg font-semibold text-foreground">Board</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">{tasks.length} task{tasks.length !== 1 ? 's' : ''} total</p>
+          </div>
+          <Button onClick={() => handleAdd('todo')} size="sm" className="gap-2">
+            <Plus className="h-4 w-4" />
             Add Task
           </Button>
         </div>
 
-        <div className="flex flex-1 gap-6 overflow-x-auto p-6 md:p-8 no-scrollbar">
+        {/* Columns */}
+        <div className="flex flex-1 gap-5 overflow-x-auto p-6 md:p-8 no-scrollbar items-start">
           <DndContext
             sensors={sensors}
             collisionDetection={closestCorners}

@@ -23,9 +23,7 @@ export function useTasks(projectId: string | undefined) {
       message,
       is_read: false,
     });
-    // ✅ Show toast immediately
     toast({ title: "New Notification", description: message });
-    // ✅ Refresh notifications list immediately
     queryClient.invalidateQueries({ queryKey: ['notifications'] });
   };
 
@@ -68,7 +66,8 @@ export function useTasks(projectId: string | undefined) {
   }, [projectId, queryClient]);
 
   const createTask = useMutation({
-    mutationFn: async ({ title, description, assigned_to, due_date }: any) => {
+    // ✅ added priority here
+    mutationFn: async ({ title, description, assigned_to, due_date, priority, status }: any) => {
       if (!projectId) throw new Error("No project selected");
 
       const { data, error } = await supabase
@@ -78,7 +77,8 @@ export function useTasks(projectId: string | undefined) {
           description,
           project_id: projectId,
           assigned_to,
-          status: 'todo',
+          status: status ?? 'todo', // ✅ use status from modal, fallback to todo
+          priority: priority ?? 'medium', // ✅ use priority from modal, fallback to medium
           due_date: due_date ? new Date(due_date) : null,
         })
         .select()
@@ -114,7 +114,7 @@ export function useTasks(projectId: string | undefined) {
     mutationFn: async ({ taskId, ...updates }: any) => {
       const { data, error } = await supabase
         .from('tasks')
-        .update(updates)
+        .update(updates) // ✅ priority is inside updates automatically
         .eq('id', taskId)
         .select()
         .single();
