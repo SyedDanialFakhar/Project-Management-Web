@@ -15,6 +15,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { ThemeProvider } from '@/components/theme_provider';
 import { ThemeToggle } from "@/components/theme-toggle";
 import GamePage from "./pages/GamePage";
+import AnalyticsPage from "./pages/AnalyticsPage";
+
 
 const queryClient = new QueryClient();
 
@@ -73,6 +75,7 @@ function AppLayout() {
               <Route path="/notifications" element={<NotificationsPage />} />
               <Route path="*" element={<NotFound />} />
               <Route path="/game" element={<GamePage />} />
+              <Route path="/analytics" element={<AnalyticsPage />} />
             </Routes>
           </main>
         </div>
