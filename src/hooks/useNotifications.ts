@@ -10,21 +10,18 @@ export function useNotifications(userId?: string) {
     queryKey: ['notifications', userId],
     queryFn: async () => {
       if (!userId) return [];
-
       const { data, error } = await supabase
         .from('notifications')
         .select('*')
         .eq('user_id', userId)
         .order('created_at', { ascending: false });
-
       if (error) throw error;
-
       return data;
     },
     enabled: !!userId,
   });
 
-  // realtime subscription
+  // Realtime — handles notifications inserted by OTHER users (e.g. someone assigns you a task)
   useEffect(() => {
     if (!userId) return;
 
@@ -40,20 +37,13 @@ export function useNotifications(userId?: string) {
         },
         (payload) => {
           const notification: any = payload.new;
-
-          toast({
-            title: "New Notification",
-            description: notification.message,
-          });
-
+          toast({ title: "New Notification", description: notification.message });
           queryClient.invalidateQueries({ queryKey: ['notifications', userId] });
         }
       )
       .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => supabase.removeChannel(channel);
   }, [userId, queryClient]);
 
   const markAsRead = useMutation({
@@ -62,7 +52,20 @@ export function useNotifications(userId?: string) {
         .from('notifications')
         .update({ is_read: true })
         .eq('id', notificationId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notifications', userId] });
+    },
+  });
 
+  const markAllAsRead = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase
+        .from('notifications')
+        .update({ is_read: true })
+        .eq('user_id', userId)
+        .eq('is_read', false);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -72,9 +75,5 @@ export function useNotifications(userId?: string) {
 
   const unreadCount = query.data?.filter((n: any) => !n.is_read).length ?? 0;
 
-  return {
-    ...query,
-    markAsRead,
-    unreadCount,
-  };
+  return { ...query, markAsRead, markAllAsRead, unreadCount };
 }

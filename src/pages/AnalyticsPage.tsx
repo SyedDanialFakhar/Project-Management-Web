@@ -44,10 +44,10 @@ export default function AnalyticsPage() {
               className="w-40"
             />
           </div>
-          <Button variant="outline" size="sm" onClick={exportToCSV}>
+          {/* <Button variant="outline" size="sm" onClick={exportToCSV}>
             <Download className="h-4 w-4 mr-2" />
             Export CSV
-          </Button>
+          </Button> */}
         </div>
       </div>
 
