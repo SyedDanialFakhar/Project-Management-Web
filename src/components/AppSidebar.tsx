@@ -22,6 +22,7 @@ const items = [
 
   /* NEW GAME BUTTON */
   { title: 'Game', url: '/game', icon: Gamepad2 }
+  { title: 'Analytics', url: '/analytics', icon: LayoutDashboard }
 ];
 
 interface AppSidebarProps {
