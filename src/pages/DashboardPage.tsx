@@ -10,7 +10,7 @@ import { Plus, FolderKanban, Loader2 } from 'lucide-react';
 
 export default function DashboardPage() {
   const { user } = useAuth();
-  const { data: projects, isLoading, createProject, deleteProject } = useProjects(user?.id); // ✅ added deleteProject here
+  const { data: projects, isLoading, createProject, deleteProject, loadMore, hasMore } = useProjects(user?.id); // ✅ added loadMore, hasMore
   const [modalOpen, setModalOpen] = useState(false);
   const navigate = useNavigate();
 
@@ -56,17 +56,36 @@ export default function DashboardPage() {
         </div>
 
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {projects?.map((project) => (
-            <ProjectCard
-              key={project.id}
-              project={project}
-              onClick={() => navigate(`/project/${project.id}`)}
-              onDelete={() => deleteProject.mutateAsync(project.id)} // ✅ now works
-            />
-          ))}
-          <NewProjectCard onClick={() => setModalOpen(true)} />
-        </div>
+        <>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {/* <NewProjectCard onClick={() => setModalOpen(true)} /> */}
+            {projects?.map((project) => (
+              <ProjectCard
+                key={project.id}
+                project={project}
+                onClick={() => navigate(`/project/${project.id}`)}
+                onDelete={() => deleteProject.mutateAsync(project.id)}
+              />
+            ))}
+          </div>
+
+          {/* ✅ Load more button */}
+          {hasMore && (
+            <div className="flex justify-center mt-8">
+              <Button
+                variant="outline"
+                onClick={loadMore}
+                disabled={isLoading}
+                className="gap-2"
+              >
+                {isLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : null}
+                Load more projects
+              </Button>
+            </div>
+          )}
+        </>
       )}
 
       <CreateProjectModal

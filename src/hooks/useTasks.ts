@@ -44,7 +44,7 @@ export function useTasks(projectId: string | undefined) {
         .from('tasks')
         .select('*')
         .eq('project_id', projectId)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false }); // ✅ fetch all, no limit
       if (error) throw error;
       return data as Task[];
     },
@@ -66,7 +66,6 @@ export function useTasks(projectId: string | undefined) {
   }, [projectId, queryClient]);
 
   const createTask = useMutation({
-    // ✅ added priority here
     mutationFn: async ({ title, description, assigned_to, due_date, priority, status }: any) => {
       if (!projectId) throw new Error("No project selected");
 
@@ -77,8 +76,8 @@ export function useTasks(projectId: string | undefined) {
           description,
           project_id: projectId,
           assigned_to,
-          status: status ?? 'todo', // ✅ use status from modal, fallback to todo
-          priority: priority ?? 'medium', // ✅ use priority from modal, fallback to medium
+          status: status ?? 'todo',
+          priority: priority ?? 'medium',
           due_date: due_date ? new Date(due_date) : null,
         })
         .select()
@@ -114,7 +113,7 @@ export function useTasks(projectId: string | undefined) {
     mutationFn: async ({ taskId, ...updates }: any) => {
       const { data, error } = await supabase
         .from('tasks')
-        .update(updates) // ✅ priority is inside updates automatically
+        .update(updates)
         .eq('id', taskId)
         .select()
         .single();

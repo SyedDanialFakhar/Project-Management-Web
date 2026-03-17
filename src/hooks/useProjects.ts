@@ -1,24 +1,34 @@
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabaseClient';
 import type { Project } from '@/types/database.types';
 import { logEvent } from '@/lib/analytics';
 import { toast } from '@/hooks/use-toast';
 
+const PAGE_SIZE = 9; // fits 3x3 grid nicely
+
 export function useProjects(authUserId: string | undefined) {
   const queryClient = useQueryClient();
+  const [page, setPage] = useState(1);
 
   const query = useQuery({
-    queryKey: ['projects', authUserId],
+    queryKey: ['projects', authUserId, page],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('projects')
         .select('*')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .range(0, page * PAGE_SIZE - 1); // ✅ always fetch from 0 to current page end
       if (error) throw error;
       return data as Project[];
     },
     enabled: !!authUserId,
   });
+
+  // ✅ hasMore — if returned count equals page * PAGE_SIZE, there might be more
+  const hasMore = (query.data?.length ?? 0) === page * PAGE_SIZE;
+
+  const loadMore = () => setPage(prev => prev + 1);
 
   const createProject = useMutation({
     mutationFn: async ({ name, description }: { name: string; description: string }) => {
@@ -53,17 +63,16 @@ export function useProjects(authUserId: string | undefined) {
         is_read: false,
       });
 
-      // ✅ Show toast immediately after insert
       toast({ title: "New Notification", description: message });
 
       return project;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['projects', authUserId] });
-      // ✅ Refresh notifications list immediately
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
     },
   });
+
   const deleteProject = useMutation({
     mutationFn: async (projectId: string) => {
       const { error } = await supabase
@@ -76,8 +85,6 @@ export function useProjects(authUserId: string | undefined) {
       queryClient.invalidateQueries({ queryKey: ['projects', authUserId] });
     },
   });
-  
-  // add to return
-  return { ...query, createProject, deleteProject };
 
+  return { ...query, createProject, deleteProject, loadMore, hasMore };
 }
