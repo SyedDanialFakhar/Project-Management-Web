@@ -16,6 +16,9 @@ import { ThemeProvider } from '@/components/theme_provider';
 import { ThemeToggle } from "@/components/theme-toggle";
 import GamePage from "./pages/GamePage";
 import AnalyticsPage from "./pages/AnalyticsPage";
+import LeavePage from './pages/LeavePage';
+import LeaveManagementPage from './pages/LeaveManagementPage';
+import AdminPage from './pages/AdminPage';
 
 
 const queryClient = new QueryClient();
@@ -76,6 +79,9 @@ function AppLayout() {
               <Route path="*" element={<NotFound />} />
               <Route path="/game" element={<GamePage />} />
               <Route path="/analytics" element={<AnalyticsPage />} />
+              <Route path="/leave" element={<LeavePage />} />
+              <Route path="/leave/manage" element={<LeaveManagementPage />} />
+              <Route path="/admin" element={<AdminPage />} />
             </Routes>
           </main>
         </div>

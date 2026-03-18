@@ -2,6 +2,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useNotifications } from '@/hooks/useNotifications';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { CalendarDays, CheckCircle, XCircle } from 'lucide-react';
 import {
   Bell, Check, CheckCheck,
   FolderPlus, UserCheck, ArrowRightLeft,
@@ -35,6 +36,22 @@ const TYPE_CONFIG: Record<string, { icon: React.ReactNode; color: string }> = {
     icon: <Bell className="h-4 w-4" />,
     color: 'text-muted-foreground bg-muted',
   },
+  // leave_requested: {
+  //   icon: <CalendarDays className="h-4 w-4" />,
+  //   color: 'text-purple-500 bg-purple-500/10',
+  // },
+  // leave_approved: {
+  //   icon: <CheckCircle className="h-4 w-4" />,
+  //   color: 'text-green-500 bg-green-500/10',
+  // },
+  // leave_rejected: {-
+  //   icon: <XCircle className="h-4 w-4" />,
+  //   color: 'text-red-500 bg-red-500/10',
+  // },
+  leave_applied:  { icon: <CalendarDays className="h-4 w-4" />, color: 'text-blue-500 bg-blue-500/10' },
+leave_approved: { icon: <CheckCircle className="h-4 w-4" />,  color: 'text-green-500 bg-green-500/10' },
+leave_rejected: { icon: <XCircle className="h-4 w-4" />,     color: 'text-red-500 bg-red-500/10' },
+
 };
 
 export default function NotificationsPage() {

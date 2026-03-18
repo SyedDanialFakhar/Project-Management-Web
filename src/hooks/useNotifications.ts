@@ -3,48 +3,47 @@ import { supabase } from '@/lib/supabaseClient';
 import { useEffect } from 'react';
 import { toast } from '@/hooks/use-toast';
 
-export function useNotifications(userId?: string) {
+export function useNotifications(internalUserId?: string) {
   const queryClient = useQueryClient();
 
   const query = useQuery({
-    queryKey: ['notifications', userId],
+    queryKey: ['notifications', internalUserId],
     queryFn: async () => {
-      if (!userId) return [];
+      if (!internalUserId) return [];
       const { data, error } = await supabase
         .from('notifications')
         .select('*')
-        .eq('user_id', userId)
+        .eq('user_id', internalUserId) // ✅ internal users.id
         .order('created_at', { ascending: false });
       if (error) throw error;
       return data;
     },
-    enabled: !!userId,
+    enabled: !!internalUserId,
   });
 
-  // Realtime — handles notifications inserted by OTHER users (e.g. someone assigns you a task)
   useEffect(() => {
-    if (!userId) return;
+    if (!internalUserId) return;
 
     const channel = supabase
-      .channel(`notifications-${userId}`)
+      .channel(`notifications-${internalUserId}`)
       .on(
         'postgres_changes',
         {
           event: 'INSERT',
           schema: 'public',
           table: 'notifications',
-          filter: `user_id=eq.${userId}`,
+          filter: `user_id=eq.${internalUserId}`,
         },
         (payload) => {
           const notification: any = payload.new;
           toast({ title: "New Notification", description: notification.message });
-          queryClient.invalidateQueries({ queryKey: ['notifications', userId] });
+          queryClient.invalidateQueries({ queryKey: ['notifications', internalUserId] });
         }
       )
       .subscribe();
 
     return () => supabase.removeChannel(channel);
-  }, [userId, queryClient]);
+  }, [internalUserId, queryClient]);
 
   const markAsRead = useMutation({
     mutationFn: async (notificationId: string) => {
@@ -55,7 +54,7 @@ export function useNotifications(userId?: string) {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['notifications', userId] });
+      queryClient.invalidateQueries({ queryKey: ['notifications', internalUserId] });
     },
   });
 
@@ -64,12 +63,12 @@ export function useNotifications(userId?: string) {
       const { error } = await supabase
         .from('notifications')
         .update({ is_read: true })
-        .eq('user_id', userId)
+        .eq('user_id', internalUserId)
         .eq('is_read', false);
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['notifications', userId] });
+      queryClient.invalidateQueries({ queryKey: ['notifications', internalUserId] });
     },
   });
 
