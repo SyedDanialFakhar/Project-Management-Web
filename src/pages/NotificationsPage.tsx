@@ -1,4 +1,5 @@
 import { useAuth } from '@/hooks/useAuth';
+import { useUserRole } from '@/hooks/useUserRole';
 import { useNotifications } from '@/hooks/useNotifications';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -12,57 +13,27 @@ import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
 
 const TYPE_CONFIG: Record<string, { icon: React.ReactNode; color: string }> = {
-  project_created: {
-    icon: <FolderPlus className="h-4 w-4" />,
-    color: 'text-blue-500 bg-blue-500/10',
-  },
-  task_assigned: {
-    icon: <UserCheck className="h-4 w-4" />,
-    color: 'text-violet-500 bg-violet-500/10',
-  },
-  task_status_changed: {
-    icon: <ArrowRightLeft className="h-4 w-4" />,
-    color: 'text-amber-500 bg-amber-500/10',
-  },
-  task_updated: {
-    icon: <Pencil className="h-4 w-4" />,
-    color: 'text-green-500 bg-green-500/10',
-  },
-  task_deleted: {
-    icon: <Trash2 className="h-4 w-4" />,
-    color: 'text-red-500 bg-red-500/10',
-  },
-  default: {
-    icon: <Bell className="h-4 w-4" />,
-    color: 'text-muted-foreground bg-muted',
-  },
-  // leave_requested: {
-  //   icon: <CalendarDays className="h-4 w-4" />,
-  //   color: 'text-purple-500 bg-purple-500/10',
-  // },
-  // leave_approved: {
-  //   icon: <CheckCircle className="h-4 w-4" />,
-  //   color: 'text-green-500 bg-green-500/10',
-  // },
-  // leave_rejected: {-
-  //   icon: <XCircle className="h-4 w-4" />,
-  //   color: 'text-red-500 bg-red-500/10',
-  // },
-  leave_applied:  { icon: <CalendarDays className="h-4 w-4" />, color: 'text-blue-500 bg-blue-500/10' },
-leave_approved: { icon: <CheckCircle className="h-4 w-4" />,  color: 'text-green-500 bg-green-500/10' },
-leave_rejected: { icon: <XCircle className="h-4 w-4" />,     color: 'text-red-500 bg-red-500/10' },
-
+  project_created:    { icon: <FolderPlus className="h-4 w-4" />,      color: 'text-blue-500 bg-blue-500/10' },
+  task_assigned:      { icon: <UserCheck className="h-4 w-4" />,        color: 'text-violet-500 bg-violet-500/10' },
+  task_status_changed:{ icon: <ArrowRightLeft className="h-4 w-4" />,   color: 'text-amber-500 bg-amber-500/10' },
+  task_updated:       { icon: <Pencil className="h-4 w-4" />,           color: 'text-green-500 bg-green-500/10' },
+  task_deleted:       { icon: <Trash2 className="h-4 w-4" />,           color: 'text-red-500 bg-red-500/10' },
+  leave_applied:      { icon: <CalendarDays className="h-4 w-4" />,     color: 'text-blue-500 bg-blue-500/10' },
+  leave_approved:     { icon: <CheckCircle className="h-4 w-4" />,      color: 'text-green-500 bg-green-500/10' },
+  leave_rejected:     { icon: <XCircle className="h-4 w-4" />,          color: 'text-red-500 bg-red-500/10' },
+  default:            { icon: <Bell className="h-4 w-4" />,             color: 'text-muted-foreground bg-muted' },
 };
 
 export default function NotificationsPage() {
   const { user } = useAuth();
+  const { data: userRow } = useUserRole(user?.id);       // ✅ get internal user
   const {
     data: notifications = [],
     isLoading,
     markAsRead,
     markAllAsRead,
     unreadCount,
-  } = useNotifications(user?.id);
+  } = useNotifications(userRow?.id);                     // ✅ pass internal id
 
   return (
     <div className="p-6 md:p-8 max-w-3xl mx-auto space-y-8">
@@ -117,7 +88,6 @@ export default function NotificationsPage() {
         <div className="space-y-2">
           {notifications.map((notification) => {
             const config = TYPE_CONFIG[notification.type] ?? TYPE_CONFIG.default;
-
             return (
               <div
                 key={notification.id}
@@ -129,12 +99,10 @@ export default function NotificationsPage() {
                     : "bg-muted/30 border-transparent hover:bg-muted/50 opacity-70"
                 )}
               >
-                {/* Unread dot */}
                 {!notification.is_read && (
                   <span className="absolute right-4 top-4 h-2 w-2 rounded-full bg-primary" />
                 )}
 
-                {/* Icon */}
                 <div className={cn(
                   "flex-shrink-0 h-9 w-9 rounded-full flex items-center justify-center",
                   notification.is_read ? 'bg-muted text-muted-foreground' : config.color
@@ -142,7 +110,6 @@ export default function NotificationsPage() {
                   {config.icon}
                 </div>
 
-                {/* Content */}
                 <div className="flex-1 min-w-0 pt-0.5 pr-6">
                   <p className={cn(
                     "text-sm leading-snug",
@@ -155,7 +122,6 @@ export default function NotificationsPage() {
                   </time>
                 </div>
 
-                {/* Mark as read */}
                 {!notification.is_read && (
                   <Button
                     variant="ghost"
@@ -177,3 +143,18 @@ export default function NotificationsPage() {
     </div>
   );
 }
+
+
+
+  // leave_requested: {
+  //   icon: <CalendarDays className="h-4 w-4" />,
+  //   color: 'text-purple-500 bg-purple-500/10',
+  // },
+  // leave_approved: {
+  //   icon: <CheckCircle className="h-4 w-4" />,
+  //   color: 'text-green-500 bg-green-500/10',
+  // },
+  // leave_rejected: {-
+  //   icon: <XCircle className="h-4 w-4" />,
+  //   color: 'text-red-500 bg-red-500/10',
+  // },

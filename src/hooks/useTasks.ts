@@ -3,7 +3,6 @@ import { supabase } from '@/lib/supabaseClient';
 import type { Task, TaskStatus } from '@/types/database.types';
 import { useEffect } from 'react';
 import { logEvent } from '@/lib/analytics';
-import { toast } from '@/hooks/use-toast';
 
 const statusLabel: Record<string, string> = {
   todo: 'To Do',
@@ -15,6 +14,7 @@ const statusLabel: Record<string, string> = {
 export function useTasks(projectId: string | undefined) {
   const queryClient = useQueryClient();
 
+  // ✅ No toast here — realtime in useNotifications handles it for the recipient only
   const createNotification = async (userId: string, message: string, type: string) => {
     if (!userId) return;
     await supabase.from('notifications').insert({
@@ -23,8 +23,6 @@ export function useTasks(projectId: string | undefined) {
       message,
       is_read: false,
     });
-    toast({ title: "New Notification", description: message });
-    queryClient.invalidateQueries({ queryKey: ['notifications'] });
   };
 
   const getProjectName = async (projId: string): Promise<string> => {
@@ -44,7 +42,7 @@ export function useTasks(projectId: string | undefined) {
         .from('tasks')
         .select('*')
         .eq('project_id', projectId)
-        .order('created_at', { ascending: false }); // ✅ fetch all, no limit
+        .order('created_at', { ascending: false });
       if (error) throw error;
       return data as Task[];
     },
@@ -85,6 +83,7 @@ export function useTasks(projectId: string | undefined) {
 
       if (error) throw error;
 
+      // Log analytics event
       const { data: authUser } = await supabase.auth.getUser();
       if (authUser?.user) {
         const { data: userRow } = await supabase
@@ -95,6 +94,7 @@ export function useTasks(projectId: string | undefined) {
         if (userRow) await logEvent(userRow.id, "task_created", 1);
       }
 
+      // ✅ Only notify the assigned person — no toast on admin side
       if (assigned_to) {
         const projectName = await getProjectName(projectId);
         await createNotification(
@@ -111,6 +111,13 @@ export function useTasks(projectId: string | undefined) {
 
   const updateTask = useMutation({
     mutationFn: async ({ taskId, ...updates }: any) => {
+      // ✅ Get old task first to detect assignee change
+      const { data: oldTask } = await supabase
+        .from('tasks')
+        .select('*')
+        .eq('id', taskId)
+        .single();
+
       const { data, error } = await supabase
         .from('tasks')
         .update(updates)
@@ -119,13 +126,24 @@ export function useTasks(projectId: string | undefined) {
         .single();
       if (error) throw error;
 
-      if (data.assigned_to && projectId) {
+      if (projectId) {
         const projectName = await getProjectName(projectId);
-        await createNotification(
-          data.assigned_to,
-          `Task "${data.title}" in project "${projectName}" was updated.`,
-          'task_updated'
-        );
+
+        // ✅ If assignee changed — notify new assignee only
+        if (updates.assigned_to && updates.assigned_to !== oldTask?.assigned_to) {
+          await createNotification(
+            updates.assigned_to,
+            `You have been assigned a new task "${data.title}" in project "${projectName}".`,
+            'task_assigned'
+          );
+        } else if (data.assigned_to) {
+          // ✅ Just updated — notify current assignee only
+          await createNotification(
+            data.assigned_to,
+            `Task "${data.title}" in project "${projectName}" was updated.`,
+            'task_updated'
+          );
+        }
       }
 
       return data;
@@ -143,6 +161,7 @@ export function useTasks(projectId: string | undefined) {
         .single();
       if (error) throw error;
 
+      // ✅ Only notify the assigned person — no toast on whoever changed the status
       if (data.assigned_to && projectId) {
         const projectName = await getProjectName(projectId);
         const readable = statusLabel[status] ?? status;
@@ -164,6 +183,7 @@ export function useTasks(projectId: string | undefined) {
       const { error } = await supabase.from('tasks').delete().eq('id', taskId);
       if (error) throw error;
 
+      // ✅ Only notify the assigned person
       if (task?.assigned_to && projectId) {
         const projectName = await getProjectName(projectId);
         await createNotification(

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useProjects } from '@/hooks/useProjects';
 import { useAuth } from '@/hooks/useAuth';
+import { useUserRole } from '@/hooks/useUserRole';
 import { CreateProjectModal } from '@/components/CreateProjectModal';
 import { ProjectCard } from '@/components/ProjectCard';
 import { NewProjectCard } from '@/components/NewProjectCard';
@@ -10,7 +11,10 @@ import { Plus, FolderKanban, Loader2 } from 'lucide-react';
 
 export default function DashboardPage() {
   const { user } = useAuth();
-  const { data: projects, isLoading, createProject, deleteProject, loadMore, hasMore } = useProjects(user?.id); // ✅ added loadMore, hasMore
+  const { data: userRow } = useUserRole(user?.id);
+  const isEmployee = userRow?.role === 'employee';
+
+  const { data: projects, isLoading, createProject, deleteProject, loadMore, hasMore } = useProjects(user?.id);
   const [modalOpen, setModalOpen] = useState(false);
   const navigate = useNavigate();
 
@@ -28,13 +32,15 @@ export default function DashboardPage() {
               : 'Manage your project boards'}
           </p>
         </div>
-        <Button onClick={() => setModalOpen(true)} className="gap-2 mt-1">
-          <Plus className="h-4 w-4" />
-          New Project
-        </Button>
+        {/* ✅ Only admins/managers can create projects */}
+        {!isEmployee && (
+          <Button onClick={() => setModalOpen(true)} className="gap-2 mt-1">
+            <Plus className="h-4 w-4" />
+            New Project
+          </Button>
+        )}
       </div>
 
-      {/* Loading */}
       {isLoading ? (
         <div className="flex justify-center py-24">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -45,42 +51,42 @@ export default function DashboardPage() {
           <div className="h-16 w-16 rounded-2xl bg-muted flex items-center justify-center mb-4">
             <FolderKanban className="h-8 w-8 text-muted-foreground/60" />
           </div>
-          <h2 className="text-base font-semibold text-foreground mb-1">No projects yet</h2>
+          <h2 className="text-base font-semibold text-foreground mb-1">
+            {isEmployee ? 'No tasks assigned yet' : 'No projects yet'}
+          </h2>
           <p className="text-sm text-muted-foreground mb-6 max-w-xs">
-            Create your first project to start organizing tasks and tracking progress.
+            {isEmployee
+              ? 'Projects where you have assigned tasks will appear here.'
+              : 'Create your first project to start organizing tasks and tracking progress.'}
           </p>
-          <Button onClick={() => setModalOpen(true)} className="gap-2">
-            <Plus className="h-4 w-4" />
-            Create Project
-          </Button>
+          {!isEmployee && (
+            <Button onClick={() => setModalOpen(true)} className="gap-2">
+              <Plus className="h-4 w-4" />
+              Create Project
+            </Button>
+          )}
         </div>
 
       ) : (
         <>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {/* <NewProjectCard onClick={() => setModalOpen(true)} /> */}
+            {/* ✅ Only admins/managers see New Project card */}
+            {!isEmployee && <NewProjectCard onClick={() => setModalOpen(true)} />}
             {projects?.map((project) => (
               <ProjectCard
                 key={project.id}
                 project={project}
                 onClick={() => navigate(`/project/${project.id}`)}
-                onDelete={() => deleteProject.mutateAsync(project.id)}
+                // ✅ Only admins/managers can delete
+                onDelete={!isEmployee ? () => deleteProject.mutateAsync(project.id) : undefined}
               />
             ))}
           </div>
 
-          {/* ✅ Load more button */}
           {hasMore && (
             <div className="flex justify-center mt-8">
-              <Button
-                variant="outline"
-                onClick={loadMore}
-                disabled={isLoading}
-                className="gap-2"
-              >
-                {isLoading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : null}
+              <Button variant="outline" onClick={loadMore} disabled={isLoading} className="gap-2">
+                {isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
                 Load more projects
               </Button>
             </div>

@@ -1,6 +1,5 @@
 import { LayoutDashboard, FolderKanban, Bell, LogOut, Gamepad2, CalendarDays, ClipboardList, ShieldCheck } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
-import { useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useUserRole } from '@/hooks/useUserRole';
@@ -14,18 +13,22 @@ interface AppSidebarProps {
 }
 
 export function AppSidebar({ onSignOut }: AppSidebarProps) {
-  const { state } = useSidebar();
+  const { state, setOpenMobile } = useSidebar(); // ✅ get setOpenMobile
   const collapsed = state === 'collapsed';
   const { user } = useAuth();
-  const { unreadCount } = useNotifications(user?.id);
   const { data: userRow } = useUserRole(user?.id);
+  const { unreadCount } = useNotifications(userRow?.id);
   const role = userRow?.role;
+  const isEmployee = role === 'employee';
+
+  // ✅ Close sidebar on mobile when nav item clicked
+  const handleNavClick = () => setOpenMobile(false);
 
   const mainItems = [
     { title: 'Dashboard', url: '/', icon: LayoutDashboard },
     { title: 'Notifications', url: '/notifications', icon: Bell },
     { title: 'Game', url: '/game', icon: Gamepad2 },
-    { title: 'Analytics', url: '/analytics', icon: LayoutDashboard },
+    ...(!isEmployee ? [{ title: 'Analytics', url: '/analytics', icon: LayoutDashboard }] : []),
   ];
 
   const leaveItems = [
@@ -52,7 +55,6 @@ export function AppSidebar({ onSignOut }: AppSidebarProps) {
           )}
         </div>
 
-        {/* Main nav */}
         <SidebarGroup>
           <SidebarGroupLabel>Navigation</SidebarGroupLabel>
           <SidebarGroupContent>
@@ -60,7 +62,12 @@ export function AppSidebar({ onSignOut }: AppSidebarProps) {
               {mainItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
-                    <NavLink to={item.url} className="hover:bg-sidebar-accent relative" activeClassName="bg-sidebar-accent text-sidebar-primary font-medium">
+                    <NavLink
+                      to={item.url}
+                      className="hover:bg-sidebar-accent relative"
+                      activeClassName="bg-sidebar-accent text-sidebar-primary font-medium"
+                      onClick={handleNavClick} // ✅ close on click
+                    >
                       <item.icon className="mr-2 h-4 w-4" />
                       {!collapsed && <span>{item.title}</span>}
                       {item.title === 'Notifications' && unreadCount > 0 && (
@@ -74,7 +81,6 @@ export function AppSidebar({ onSignOut }: AppSidebarProps) {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* Leave nav */}
         <SidebarGroup>
           <SidebarGroupLabel>Leave</SidebarGroupLabel>
           <SidebarGroupContent>
@@ -82,7 +88,12 @@ export function AppSidebar({ onSignOut }: AppSidebarProps) {
               {leaveItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
-                    <NavLink to={item.url} className="hover:bg-sidebar-accent relative" activeClassName="bg-sidebar-accent text-sidebar-primary font-medium">
+                    <NavLink
+                      to={item.url}
+                      className="hover:bg-sidebar-accent relative"
+                      activeClassName="bg-sidebar-accent text-sidebar-primary font-medium"
+                      onClick={handleNavClick} // ✅ close on click
+                    >
                       <item.icon className="mr-2 h-4 w-4" />
                       {!collapsed && <span>{item.title}</span>}
                     </NavLink>
@@ -95,7 +106,10 @@ export function AppSidebar({ onSignOut }: AppSidebarProps) {
 
         {onSignOut && (
           <div className="mt-auto p-4 border-t border-sidebar-border">
-            <button onClick={onSignOut} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors w-full">
+            <button
+              onClick={onSignOut}
+              className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors w-full"
+            >
               <LogOut className="h-4 w-4" />
               {!collapsed && <span>Sign Out</span>}
             </button>

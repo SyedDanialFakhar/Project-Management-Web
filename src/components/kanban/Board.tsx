@@ -11,6 +11,8 @@ import { TaskCard } from './TaskCard';
 import { TaskModal } from './TaskModal';
 import { useTasks } from '@/hooks/useTasks';
 import { useUsers } from '@/hooks/useUsers';
+import { useAuth } from '@/hooks/useAuth';
+import { useUserRole } from '@/hooks/useUserRole';
 import { Button } from '@/components/ui/button';
 import { Plus, Loader2 } from 'lucide-react';
 
@@ -21,12 +23,24 @@ const COLUMNS: { id: TaskStatus; title: string }[] = [
 ];
 
 export function KanbanBoard({ projectId }: { projectId: string }) {
-  const { data: tasks = [], updateTaskStatus, createTask, updateTask, deleteTask, isLoading } = useTasks(projectId);
+  const { user } = useAuth();
+  const { data: userRow } = useUserRole(user?.id);
+  const isEmployee = userRow?.role === 'employee';
+
+  const { data: allTasks = [], updateTaskStatus, createTask, updateTask, deleteTask, isLoading } = useTasks(projectId);
   const { data: users = [] } = useUsers();
 
-  const [activeTask, setActiveTask]     = useState<Task | null>(null);
-  const [modalOpen, setModalOpen]       = useState(false);
-  const [editingTask, setEditingTask]   = useState<Task | null>(null);
+  // ✅ Employees only see tasks assigned to them
+  const tasks = useMemo(() => {
+    if (isEmployee && userRow?.id) {
+      return allTasks.filter(t => t.assigned_to === userRow.id);
+    }
+    return allTasks;
+  }, [allTasks, isEmployee, userRow?.id]);
+
+  const [activeTask, setActiveTask]       = useState<Task | null>(null);
+  const [modalOpen, setModalOpen]         = useState(false);
+  const [editingTask, setEditingTask]     = useState<Task | null>(null);
   const [defaultStatus, setDefaultStatus] = useState<TaskStatus>('todo');
 
   const userMap = useMemo(() => {
@@ -92,19 +106,23 @@ export function KanbanBoard({ projectId }: { projectId: string }) {
   return (
     <>
       <div className="flex h-full w-full flex-col">
-        {/* Board header */}
         <div className="flex items-center justify-between px-6 py-4 border-b bg-background/80 backdrop-blur-sm">
           <div>
             <h2 className="text-lg font-semibold text-foreground">Board</h2>
-            <p className="text-xs text-muted-foreground mt-0.5">{tasks.length} task{tasks.length !== 1 ? 's' : ''} total</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {tasks.length} task{tasks.length !== 1 ? 's' : ''}
+              {isEmployee ? ' assigned to you' : ' total'}
+            </p>
           </div>
-          <Button onClick={() => handleAdd('todo')} size="sm" className="gap-2">
-            <Plus className="h-4 w-4" />
-            Add Task
-          </Button>
+          {/* ✅ Only admins/managers can add tasks */}
+          {!isEmployee && (
+            <Button onClick={() => handleAdd('todo')} size="sm" className="gap-2">
+              <Plus className="h-4 w-4" />
+              Add Task
+            </Button>
+          )}
         </div>
 
-        {/* Columns */}
         <div className="flex flex-1 gap-5 overflow-x-auto p-6 md:p-8 no-scrollbar items-start">
           <DndContext
             sensors={sensors}
@@ -117,9 +135,10 @@ export function KanbanBoard({ projectId }: { projectId: string }) {
                 key={col.id}
                 column={col}
                 tasks={tasks.filter(t => t.status === col.id)}
-                onEdit={handleEdit}
-                onDelete={handleDelete}
-                onAdd={handleAdd}
+                // ✅ employees can't edit/delete/add tasks
+                onEdit={!isEmployee ? handleEdit : undefined}
+                onDelete={!isEmployee ? handleDelete : undefined}
+                onAdd={!isEmployee ? handleAdd : undefined}
                 userMap={userMap}
               />
             ))}
@@ -137,14 +156,17 @@ export function KanbanBoard({ projectId }: { projectId: string }) {
         </div>
       </div>
 
-      <TaskModal
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        onSave={handleSave}
-        task={editingTask}
-        defaultStatus={defaultStatus}
-        users={users}
-      />
+      {/* ✅ Modal only accessible for non-employees */}
+      {!isEmployee && (
+        <TaskModal
+          open={modalOpen}
+          onClose={() => setModalOpen(false)}
+          onSave={handleSave}
+          task={editingTask}
+          defaultStatus={defaultStatus}
+          users={users}
+        />
+      )}
     </>
   );
 }
