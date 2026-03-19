@@ -59,8 +59,11 @@ export function useTasks(projectId: string | undefined) {
         () => queryClient.invalidateQueries({ queryKey: ['tasks', projectId] })
       )
       .subscribe();
-
-    return () => supabase.removeChannel(channel);
+  
+    // ✅ Return sync cleanup — don't await inside cleanup
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [projectId, queryClient]);
 
   const createTask = useMutation({

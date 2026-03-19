@@ -1,13 +1,12 @@
-// src/hooks/usePacmanLeaderboard.ts
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabaseClient';
 
-export function usePacmanLeaderboard() {
+export function useFlappyLeaderboard() {
   return useQuery({
-    queryKey: ['pacman_scores'],
+    queryKey: ['flappy_scores'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('pacman_scores')
+        .from('flappy_scores')
         .select('*')
         .order('score', { ascending: false })
         .limit(10);
