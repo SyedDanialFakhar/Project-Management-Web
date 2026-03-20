@@ -19,6 +19,8 @@ import AnalyticsPage from "./pages/AnalyticsPage";
 import LeavePage from './pages/LeavePage';
 import LeaveManagementPage from './pages/LeaveManagementPage';
 import AdminPage from './pages/AdminPage';
+import DocumentPage from './pages/DocumentPage';
+
 
 
 const queryClient = new QueryClient();
@@ -78,6 +80,7 @@ function AppLayout() {
               <Route path="/notifications" element={<NotificationsPage />} />
               <Route path="*" element={<NotFound />} />
               <Route path="/game" element={<GamePage />} />
+              <Route path="/document" element={<DocumentPage />} />
               <Route path="/analytics" element={<AnalyticsPage />} />
               <Route path="/leave" element={<LeavePage />} />
               <Route path="/leave/manage" element={<LeaveManagementPage />} />
