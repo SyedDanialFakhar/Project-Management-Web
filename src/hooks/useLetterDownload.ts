@@ -1,203 +1,55 @@
 import { saveAs } from 'file-saver';
-import {
-  Document, Packer, Paragraph, TextRun,
-  AlignmentType, LevelFormat, ImageRun,
-} from 'docx';
+import Docxtemplater from 'docxtemplater';
+import PizZip from 'pizzip';
 import type { ExtractedLetterData } from './useLetterGenerator';
 
-async function fetchImageBuffer(url: string): Promise<ArrayBuffer> {
-  const res = await fetch(url);
-  return res.arrayBuffer();
-}
+export async function downloadLetter(
+  data: ExtractedLetterData,
+  fileName: string,
+  format: 'docx' | 'pdf' = 'docx'
+) {
+  // ✅ Load the modified template from public folder
+  const res = await fetch('/LETTER_TEMPLATE_FINAL.docx');
+  if (!res.ok) throw new Error('Template file not found in public folder');
+  const buffer = await res.arrayBuffer();
 
-function bulletList(items: string[]) {
-  return items.map(item =>
-    new Paragraph({
-      numbering: { reference: 'bullets', level: 0 },
-      children: [new TextRun({ text: item, size: 22, font: 'Calibri' })],
-    })
-  );
-}
-
-function sectionHeading(text: string) {
-  return new Paragraph({
-    spacing: { before: 160, after: 80 },
-    children: [new TextRun({ text, bold: true, size: 22, font: 'Calibri' })],
+  const zip = new PizZip(buffer);
+  const doc = new Docxtemplater(zip, {
+    paragraphLoop: true,
+    linebreaks: true,
   });
-}
 
-function bodyParagraph(text: string) {
-  return new Paragraph({
-    spacing: { after: 120 },
-    children: [new TextRun({ text, size: 22, font: 'Calibri' })],
+  // ✅ Fill all placeholders
+  doc.render({
+    referringDoctorName: data.referringDoctorName,
+    referringDoctorClinic: data.referringDoctorClinic,
+    referringDoctorAddress: data.referringDoctorAddress,
+    date: data.date,
+    patientName: data.patientName,
+    patientDOB: data.patientDOB,
+    patientContact: data.patientContact || '',
+    patientAddress: data.patientAddress || '',
+    salutation: data.salutation,
+    pmhx: data.pmhx.map(item => ({ item })),
+    medications: data.medications.map(item => ({ item })),
+    allergies: data.allergies.map(item => ({ item })),
+    socialHistory: data.socialHistory.map(item => ({ item })),
+    body: data.body,
+    plan: data.plan.filter(Boolean).map(item => ({ item })),
   });
-}
 
-function emptyLine() {
-  return new Paragraph({ children: [new TextRun('')] });
-}
+  const blob = doc.getZip().generate({
+    type: 'blob',
+    mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  });
 
-export async function downloadLetter(data: ExtractedLetterData, fileName: string) {
-
-  // ✅ Load signature image from public folder
-  let signatureBuffer: ArrayBuffer | null = null;
-  try {
-    signatureBuffer = await fetchImageBuffer('/signature.jpeg');
-  } catch {
-    // signature not found — skip it
+  if (format === 'pdf') {
+    // Open in new tab for print-to-PDF
+    const url = URL.createObjectURL(blob);
+    const win = window.open(url, '_blank');
+    if (win) win.onload = () => win.print();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  } else {
+    saveAs(blob, fileName);
   }
-
-  const bodyParagraphs = data.body
-    .split('\n\n')
-    .filter(p => p.trim())
-    .map(p => bodyParagraph(p.trim()));
-
-  const doc = new Document({
-    numbering: {
-      config: [{
-        reference: 'bullets',
-        levels: [{
-          level: 0,
-          format: LevelFormat.BULLET,
-          text: '-',
-          alignment: AlignmentType.LEFT,
-          style: { paragraph: { indent: { left: 720, hanging: 360 } } },
-        }],
-      }],
-    },
-    sections: [{
-      properties: {
-        page: {
-          size: { width: 11906, height: 16838 },
-          margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 },
-        },
-      },
-      children: [
-        // ── Sender header ──
-        new Paragraph({
-          children: [new TextRun({ text: 'Dr Sarah Yeo', bold: true, size: 28, font: 'Calibri' })],
-        }),
-        new Paragraph({
-          children: [new TextRun({ text: 'MBBS, FRACP', size: 22, font: 'Calibri' })],
-        }),
-        new Paragraph({
-          children: [new TextRun({ text: 'Respiratory & Sleep Specialist', size: 22, font: 'Calibri' })],
-        }),
-        emptyLine(),
-        new Paragraph({
-          children: [new TextRun({ text: '4 Wantirna Road, Ringwood, 3134', size: 22, font: 'Calibri' })],
-        }),
-        new Paragraph({
-          children: [new TextRun({ text: '1300 780 377', size: 22, font: 'Calibri' })],
-        }),
-        new Paragraph({
-          children: [new TextRun({ text: 'admin@respiratoryservice.com.au', size: 22, font: 'Calibri' })],
-        }),
-        emptyLine(),
-        emptyLine(),
-
-        // ── Recipient ──
-        new Paragraph({
-          children: [new TextRun({ text: data.referringDoctorName, size: 22, font: 'Calibri' })],
-        }),
-        new Paragraph({
-          children: [new TextRun({ text: data.referringDoctorClinic, size: 22, font: 'Calibri' })],
-        }),
-        new Paragraph({
-          children: [new TextRun({ text: data.referringDoctorAddress, size: 22, font: 'Calibri' })],
-        }),
-        emptyLine(),
-
-        // ── Date ──
-        new Paragraph({
-          children: [new TextRun({ text: data.date, size: 22, font: 'Calibri' })],
-        }),
-        emptyLine(),
-
-        // ── RE ──
-        new Paragraph({
-          children: [new TextRun({ text: `RE: ${data.patientName}`, size: 22, font: 'Calibri' })],
-        }),
-        new Paragraph({
-          children: [new TextRun({ text: `DOB: ${data.patientDOB}`, size: 22, font: 'Calibri' })],
-        }),
-        ...(data.patientContact ? [new Paragraph({
-          children: [new TextRun({ text: `Contact Number: ${data.patientContact}`, size: 22, font: 'Calibri' })],
-        })] : []),
-        ...(data.patientAddress ? [new Paragraph({
-          children: [new TextRun({ text: `Address: ${data.patientAddress}`, size: 22, font: 'Calibri' })],
-        })] : []),
-        emptyLine(),
-
-        // ── Salutation ──
-        new Paragraph({
-          children: [new TextRun({ text: `Dear ${data.salutation},`, size: 22, font: 'Calibri' })],
-        }),
-        emptyLine(),
-
-        // ── Medical sections ──
-        sectionHeading('PMHx'),
-        ...bulletList(data.pmhx),
-
-        sectionHeading('Medications'),
-        ...bulletList(data.medications),
-
-        sectionHeading('Allergies'),
-        ...bulletList(data.allergies),
-
-        sectionHeading('Social History'),
-        ...bulletList(data.socialHistory),
-        emptyLine(),
-
-        // ── Body ──
-        ...bodyParagraphs,
-
-        // ── Plan ──
-        ...(data.plan && data.plan.length > 0 && data.plan[0] !== '' ? [
-          emptyLine(),
-          sectionHeading('Plan'),
-          ...bulletList(data.plan),
-        ] : []),
-
-        emptyLine(),
-
-        // ── Sign off ──
-        new Paragraph({
-          children: [new TextRun({ text: 'Thank you for your ongoing care.', size: 22, font: 'Calibri' })],
-        }),
-        emptyLine(),
-        new Paragraph({
-          children: [new TextRun({ text: 'Kind Regards,', size: 22, font: 'Calibri' })],
-        }),
-        emptyLine(),
-
-        // ── Signature image ──
-        ...(signatureBuffer ? [
-          new Paragraph({
-            children: [
-              new ImageRun({
-                data: signatureBuffer,
-                transformation: { width: 120, height: 55 },
-                type: 'jpg',
-              }),
-            ],
-          }),
-        ] : [emptyLine(), emptyLine()]),
-
-        emptyLine(),
-        new Paragraph({
-          children: [new TextRun({ text: 'Electronically Approved by:', size: 22, font: 'Calibri' })],
-        }),
-        new Paragraph({
-          children: [new TextRun({ text: 'Dr Sarah Yeo', bold: true, size: 22, font: 'Calibri' })],
-        }),
-        new Paragraph({
-          children: [new TextRun({ text: 'Respiratory & Sleep Physician', size: 22, font: 'Calibri' })],
-        }),
-      ],
-    }],
-  });
-
-  const blob = await Packer.toBlob(doc);
-  saveAs(blob, fileName);
 }
