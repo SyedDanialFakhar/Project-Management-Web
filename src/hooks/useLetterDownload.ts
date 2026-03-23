@@ -1,9 +1,14 @@
 import { saveAs } from 'file-saver';
 import {
   Document, Packer, Paragraph, TextRun,
-  AlignmentType, LevelFormat, UnderlineType,
+  AlignmentType, LevelFormat, ImageRun,
 } from 'docx';
 import type { ExtractedLetterData } from './useLetterGenerator';
+
+async function fetchImageBuffer(url: string): Promise<ArrayBuffer> {
+  const res = await fetch(url);
+  return res.arrayBuffer();
+}
 
 function bulletList(items: string[]) {
   return items.map(item =>
@@ -34,6 +39,14 @@ function emptyLine() {
 
 export async function downloadLetter(data: ExtractedLetterData, fileName: string) {
 
+  // ✅ Load signature image from public folder
+  let signatureBuffer: ArrayBuffer | null = null;
+  try {
+    signatureBuffer = await fetchImageBuffer('/signature.jpeg');
+  } catch {
+    // signature not found — skip it
+  }
+
   const bodyParagraphs = data.body
     .split('\n\n')
     .filter(p => p.trim())
@@ -41,22 +54,16 @@ export async function downloadLetter(data: ExtractedLetterData, fileName: string
 
   const doc = new Document({
     numbering: {
-      config: [
-        {
-          reference: 'bullets',
-          levels: [{
-            level: 0,
-            format: LevelFormat.BULLET,
-            text: '-',
-            alignment: AlignmentType.LEFT,
-            style: {
-              paragraph: {
-                indent: { left: 720, hanging: 360 },
-              },
-            },
-          }],
-        },
-      ],
+      config: [{
+        reference: 'bullets',
+        levels: [{
+          level: 0,
+          format: LevelFormat.BULLET,
+          text: '-',
+          alignment: AlignmentType.LEFT,
+          style: { paragraph: { indent: { left: 720, hanging: 360 } } },
+        }],
+      }],
     },
     sections: [{
       properties: {
@@ -66,9 +73,9 @@ export async function downloadLetter(data: ExtractedLetterData, fileName: string
         },
       },
       children: [
-        // Sender header
+        // ── Sender header ──
         new Paragraph({
-          children: [new TextRun({ text: 'Dr Sarah Yeo', bold: true, size: 26, font: 'Calibri' })],
+          children: [new TextRun({ text: 'Dr Sarah Yeo', bold: true, size: 28, font: 'Calibri' })],
         }),
         new Paragraph({
           children: [new TextRun({ text: 'MBBS, FRACP', size: 22, font: 'Calibri' })],
@@ -89,7 +96,7 @@ export async function downloadLetter(data: ExtractedLetterData, fileName: string
         emptyLine(),
         emptyLine(),
 
-        // Recipient
+        // ── Recipient ──
         new Paragraph({
           children: [new TextRun({ text: data.referringDoctorName, size: 22, font: 'Calibri' })],
         }),
@@ -101,13 +108,13 @@ export async function downloadLetter(data: ExtractedLetterData, fileName: string
         }),
         emptyLine(),
 
-        // Date
+        // ── Date ──
         new Paragraph({
           children: [new TextRun({ text: data.date, size: 22, font: 'Calibri' })],
         }),
         emptyLine(),
 
-        // RE line
+        // ── RE ──
         new Paragraph({
           children: [new TextRun({ text: `RE: ${data.patientName}`, size: 22, font: 'Calibri' })],
         }),
@@ -122,33 +129,30 @@ export async function downloadLetter(data: ExtractedLetterData, fileName: string
         })] : []),
         emptyLine(),
 
-        // Salutation
+        // ── Salutation ──
         new Paragraph({
           children: [new TextRun({ text: `Dear ${data.salutation},`, size: 22, font: 'Calibri' })],
         }),
         emptyLine(),
 
-        // PMHx
+        // ── Medical sections ──
         sectionHeading('PMHx'),
         ...bulletList(data.pmhx),
 
-        // Medications
         sectionHeading('Medications'),
         ...bulletList(data.medications),
 
-        // Allergies
         sectionHeading('Allergies'),
         ...bulletList(data.allergies),
 
-        // Social History
         sectionHeading('Social History'),
         ...bulletList(data.socialHistory),
         emptyLine(),
 
-        // Body
+        // ── Body ──
         ...bodyParagraphs,
 
-        // Plan (only if exists)
+        // ── Plan ──
         ...(data.plan && data.plan.length > 0 && data.plan[0] !== '' ? [
           emptyLine(),
           sectionHeading('Plan'),
@@ -157,7 +161,7 @@ export async function downloadLetter(data: ExtractedLetterData, fileName: string
 
         emptyLine(),
 
-        // Sign off
+        // ── Sign off ──
         new Paragraph({
           children: [new TextRun({ text: 'Thank you for your ongoing care.', size: 22, font: 'Calibri' })],
         }),
@@ -166,7 +170,20 @@ export async function downloadLetter(data: ExtractedLetterData, fileName: string
           children: [new TextRun({ text: 'Kind Regards,', size: 22, font: 'Calibri' })],
         }),
         emptyLine(),
-        emptyLine(),
+
+        // ── Signature image ──
+        ...(signatureBuffer ? [
+          new Paragraph({
+            children: [
+              new ImageRun({
+                data: signatureBuffer,
+                transformation: { width: 120, height: 55 },
+                type: 'jpg',
+              }),
+            ],
+          }),
+        ] : [emptyLine(), emptyLine()]),
+
         emptyLine(),
         new Paragraph({
           children: [new TextRun({ text: 'Electronically Approved by:', size: 22, font: 'Calibri' })],
