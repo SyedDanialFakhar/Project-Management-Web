@@ -2,6 +2,7 @@ import { LayoutDashboard, FolderKanban, Bell, LogOut, Gamepad2, CalendarDays, Cl
 import { NavLink } from '@/components/NavLink';
 import { FileText } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import { Mail } from 'lucide-react';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useUserRole } from '@/hooks/useUserRole';
 import {
@@ -30,6 +31,7 @@ export function AppSidebar({ onSignOut }: AppSidebarProps) {
     { title: 'Notifications', url: '/notifications', icon: Bell },
     { title: 'Game', url: '/game', icon: Gamepad2 },
     { title: 'Documents', url: '/document', icon: FileText },
+    { title: 'Letter Generator', url: '/letters', icon: Mail },
     ...(!isEmployee ? [{ title: 'Analytics', url: '/analytics', icon: LayoutDashboard }] : []),
   ];
 
