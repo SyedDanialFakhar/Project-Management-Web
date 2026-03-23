@@ -10,10 +10,12 @@ async function generateDocxBlob(data: ExtractedLetterData): Promise<Blob> {
 
   const zip = new PizZip(buffer);
   const doc = new Docxtemplater(zip, {
-    paragraphLoop: true,
+    paragraphLoop: true,  // ✅ This makes each array item its own paragraph/bullet
     linebreaks: true,
   });
 
+  // ✅ Each section is an array of objects with {item} key
+  // paragraphLoop: true means each {item} becomes its own bullet line
   doc.render({
     referringDoctorName:    data.referringDoctorName,
     referringDoctorClinic:  data.referringDoctorClinic,
@@ -24,10 +26,10 @@ async function generateDocxBlob(data: ExtractedLetterData): Promise<Blob> {
     patientContact:         data.patientContact || '',
     patientAddress:         data.patientAddress || '',
     salutation:             data.salutation,
-    pmhx:          data.pmhx.map(item => ({ item })),
-    medications:   data.medications.map(item => ({ item })),
-    allergies:     data.allergies.map(item => ({ item })),
-    socialHistory: data.socialHistory.map(item => ({ item })),
+    pmhx:          data.pmhx.filter(Boolean).map(item => ({ item: item.trim() })),
+    medications:   data.medications.filter(Boolean).map(item => ({ item: item.trim() })),
+    allergies:     data.allergies.filter(Boolean).map(item => ({ item: item.trim() })),
+    socialHistory: data.socialHistory.filter(Boolean).map(item => ({ item: item.trim() })),
     body:          data.body,
   });
 
@@ -40,27 +42,7 @@ async function generateDocxBlob(data: ExtractedLetterData): Promise<Blob> {
 export async function downloadLetter(
   data: ExtractedLetterData,
   fileName: string,
-  format: 'docx' | 'pdf' = 'docx'
 ) {
   const docxBlob = await generateDocxBlob(data);
-  const baseName = fileName.replace(/\.docx$/i, '');
-
-  if (format === 'docx') {
-    // ✅ Direct .docx download
-    saveAs(docxBlob, `${baseName}.docx`);
-
-  } else {
-    // ✅ Open .docx in new tab → user presses Ctrl+P → Save as PDF
-    // The browser renders it as a Word document — user saves as PDF
-    const url = URL.createObjectURL(docxBlob);
-    const win = window.open(url, '_blank');
-    if (!win) {
-      // Fallback if popup blocked — just download the docx
-      saveAs(docxBlob, `${baseName}.docx`);
-      alert('Popup was blocked. Downloaded as .docx instead. Open it in Word and Save As PDF.');
-      return;
-    }
-    // Clean up the object URL after 60 seconds
-    setTimeout(() => URL.revokeObjectURL(url), 60000);
-  }
+  saveAs(docxBlob, fileName);
 }

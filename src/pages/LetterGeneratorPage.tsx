@@ -50,8 +50,12 @@ export default function LetterGeneratorPage() {
     if (!data) return;
     setIsDownloading(true);
     try {
-      const slug = data.patientName.replace(/[^a-zA-Z0-9]/g, '_');
-      await downloadLetter(data, `${slug}_Letter.docx`, format);
+        const cleanName = data.patientName
+        .replace(/^(Mr|Mrs|Ms|Dr|Miss)\.?\s*/i, '')  // remove title
+        .trim()
+        .replace(/\s+/g, '_');                         // spaces to underscores
+      const dateSlug = data.date.replace(/\s/g, '_').replace(/,/g, '');
+      await downloadLetter(data, `${cleanName}_${dateSlug}.docx`);
       await saveLetter.mutateAsync(data);
       setStep('done');
     } catch (err: any) {
