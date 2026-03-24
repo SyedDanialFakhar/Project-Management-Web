@@ -1,6 +1,9 @@
 import { useState } from 'react';
 
-const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY;
+const MISTRAL_API_KEY = import.meta.env.VITE_MISTRAL_API_KEY;
+if (!MISTRAL_API_KEY) {
+  console.error('VITE_MISTRAL_API_KEY is missing from .env file');
+}
 
 export interface ExtractedLetterData {
   referringDoctorName: string;
@@ -33,16 +36,16 @@ export function useLetterGenerator() {
         day: '2-digit', month: 'long', year: 'numeric',
       });
 
-      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${GROQ_API_KEY}`,
+          'Authorization': `Bearer ${MISTRAL_API_KEY}`,
         },
         body: JSON.stringify({
-          model: 'llama-3.3-70b-versatile',
+          model: 'mistral-large-latest',
           temperature: 0.1,
-          max_tokens: 3000,
+          max_tokens: 4000,
           messages: [
             {
               role: 'system',
@@ -88,7 +91,7 @@ ${transcript}`,
       });
 
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error?.message || 'Groq API error');
+      if (!response.ok) throw new Error(data.message || data.error?.message || 'Mistral API error');
 
       const content = data.choices?.[0]?.message?.content;
       if (!content) throw new Error('No response from AI');

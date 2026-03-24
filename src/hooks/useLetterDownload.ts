@@ -3,7 +3,7 @@ import Docxtemplater from 'docxtemplater';
 import PizZip from 'pizzip';
 import type { ExtractedLetterData } from './useLetterGenerator';
 
-async function generateDocxBlob(data: ExtractedLetterData): Promise<Blob> {
+export async function generateDocxBlob(data: ExtractedLetterData): Promise<Blob> {
   const res = await fetch('/LETTER_TEMPLATE_FINAL.docx');
   if (!res.ok) throw new Error('Template not found in public/ folder.');
   const buffer = await res.arrayBuffer();
