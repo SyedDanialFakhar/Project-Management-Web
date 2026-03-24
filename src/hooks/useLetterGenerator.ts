@@ -1,6 +1,7 @@
 import { useState } from 'react';
+import { withRetry, getCachedTranscript, setCachedTranscript } from '@/utils/aiHelpers';
 
-const MISTRAL_API_KEY = import.meta.env.VITE_MISTRAL_API_KEY;
+const MISTRAL_API_KEY = "hLpm8C7uDjlu6EFpc1UclJIVjgHB2jqh";
 if (!MISTRAL_API_KEY) {
   console.error('VITE_MISTRAL_API_KEY is missing from .env file');
 }
@@ -28,6 +29,10 @@ export function useLetterGenerator() {
   const [error, setError] = useState<string | null>(null);
 
   const extractAndGenerate = async (transcript: string): Promise<ExtractedLetterData> => {
+    // Check cache first
+    const cached = getCachedTranscript(transcript);
+    if (cached) return cached;
+
     setIsGenerating(true);
     setError(null);
 
@@ -36,58 +41,64 @@ export function useLetterGenerator() {
         day: '2-digit', month: 'long', year: 'numeric',
       });
 
-      const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${MISTRAL_API_KEY}`,
-        },
-        body: JSON.stringify({
-          model: 'mistral-large-latest',
-          temperature: 0.1,
-          max_tokens: 4000,
-          messages: [
-            {
-              role: 'system',
-              content: 'You are a medical secretary. Extract structured data from a doctor\'s dictated transcript and return ONLY valid JSON with no extra text or markdown.',
+      const response = await withRetry(async () => {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 45000); // 45s timeout
+
+        try {
+          const res = await fetch('https://api.mistral.ai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${MISTRAL_API_KEY}`,
             },
-            {
-              role: 'user',
-              content: `Extract all information from this medical dictation and return as JSON.
+            body: JSON.stringify({
+              model: 'mistral-small-latest', // Changed from large to small for speed
+              temperature: 0.1,
+              max_tokens: 3000, // Reduced from 4000
+              messages: [
+                {
+                  role: 'system',
+                  content: 'You are a medical secretary. Extract structured data from a doctor\'s dictated transcript and return ONLY valid JSON with no extra text or markdown.',
+                },
+                {
+                  role: 'user',
+                  content: `Extract all information from this medical dictation and return as JSON.
 
 Today's date if not specified: ${today}
 
-Return EXACTLY this JSON structure (no markdown, no extra text):
+Return EXACTLY this JSON structure:
 {
-  "referringDoctorName": "full name with title e.g. Dr. John Smith",
+  "referringDoctorName": "full name with title",
   "referringDoctorClinic": "clinic name",
   "referringDoctorAddress": "full address",
   "patientName": "Mr/Ms/Mrs FirstName LastName",
   "patientDOB": "DD/MM/YYYY",
-  "patientContact": "phone if mentioned, else empty string",
-  "patientAddress": "address if mentioned, else empty string",
-  "date": "Month DD, YYYY format e.g. April 08, 2025",
-  "salutation": "first name only of referring doctor",
+  "patientContact": "phone if mentioned",
+  "patientAddress": "address if mentioned",
+  "date": "Month DD, YYYY",
+  "salutation": "first name only",
   "pmhx": ["condition 1"],
   "medications": ["medication with dose"],
   "allergies": ["allergy with reaction"],
   "socialHistory": ["social point"],
-  "body": "Full professional medical letter body. Fix speech-to-text errors. Multiple paragraphs separated by \\n\\n.",
+  "body": "Full professional medical letter body",
   "plan": []
 }
 
-Rules:
-- Fix speech-to-text errors
-- If PMHx nil, return ["Nil"]
-- If no allergies, return ["No known drug allergies"]
-- Body should be polished professional medical prose
-- Plan is always empty []
-
-TRANSCRIPT:
-${transcript}`,
-            },
-          ],
-        }),
+TRANSCRIPT (truncated if needed):
+${transcript.slice(0, 6000)}`, // Truncate very long transcripts
+                },
+              ],
+            }),
+            signal: controller.signal,
+          });
+          clearTimeout(timeoutId);
+          return res;
+        } catch (err: any) {
+          clearTimeout(timeoutId);
+          throw err;
+        }
       });
 
       const data = await response.json();
@@ -97,10 +108,23 @@ ${transcript}`,
       if (!content) throw new Error('No response from AI');
 
       const cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-      return JSON.parse(cleaned) as ExtractedLetterData;
+      const result = JSON.parse(cleaned) as ExtractedLetterData;
+      
+      // Ensure required fields exist
+      result.plan = result.plan || [];
+      result.pmhx = result.pmhx || [];
+      result.medications = result.medications || [];
+      result.allergies = result.allergies || [];
+      result.socialHistory = result.socialHistory || [];
+
+      // Cache the result
+      setCachedTranscript(transcript, result);
+      
+      return result;
 
     } catch (err: any) {
-      setError(err.message || 'Failed to generate letter');
+      const errorMsg = err.message || 'Failed to generate letter';
+      setError(errorMsg);
       throw err;
     } finally {
       setIsGenerating(false);

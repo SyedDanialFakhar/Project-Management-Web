@@ -58,9 +58,9 @@ export default function LetterGeneratorPage() {
 
   async function handleExtract() {
     if (!transcript) return;
-
+  
     const isMultiple = detectMultiplePatients(transcript);
-
+  
     if (isMultiple) {
       setStep('batch_splitting');
       try {
@@ -72,22 +72,42 @@ export default function LetterGeneratorPage() {
           status: 'pending',
         }));
         setBatchLetters(initial);
-
+  
         const results = [...initial];
-        for (let i = 0; i < parts.length; i++) {
-          results[i] = { ...results[i], status: 'extracting' };
-          setBatchLetters([...results]);
-          try {
-            const extracted = await extractAndGenerate(parts[i]);
-            extracted.plan = [];
-            results[i] = { ...results[i], data: extracted, status: 'ready' };
-          } catch (err: any) {
-            results[i] = { ...results[i], status: 'error', error: err.message };
+        
+        // Process in parallel with concurrency limit
+        const concurrency = 3; // Process 3 at a time
+        
+        for (let i = 0; i < parts.length; i += concurrency) {
+          const batchIndices = Array.from(
+            { length: Math.min(concurrency, parts.length - i) },
+            (_, idx) => i + idx
+          );
+          
+          // Start all in this batch
+          for (const idx of batchIndices) {
+            results[idx] = { ...results[idx], status: 'extracting' };
           }
           setBatchLetters([...results]);
+          
+          // Process batch in parallel
+          const promises = batchIndices.map(async (idx) => {
+            try {
+              const extracted = await extractAndGenerate(parts[idx]);
+              extracted.plan = [];
+              results[idx] = { ...results[idx], data: extracted, status: 'ready' };
+            } catch (err: any) {
+              results[idx] = { ...results[idx], status: 'error', error: err.message };
+            }
+            // Update UI after each completes
+            setBatchLetters([...results]);
+          });
+          
+          await Promise.all(promises);
         }
+        
         setStep('batch_ready');
-      } catch {
+      } catch (err) {
         setStep('input');
       }
     } else {
