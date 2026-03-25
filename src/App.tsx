@@ -21,6 +21,7 @@ import LeaveManagementPage from './pages/LeaveManagementPage';
 import AdminPage from './pages/AdminPage';
 import DocumentPage from './pages/DocumentPage';
 import LetterGeneratorPage from './pages/LetterGeneratorPage';
+import PdfInterpreterPage from './pages/PdfInterpreterPage';
 
 
 
@@ -87,6 +88,7 @@ function AppLayout() {
               <Route path="/leave/manage" element={<LeaveManagementPage />} />
               <Route path="/admin" element={<AdminPage />} />
               <Route path="/letters" element={<LetterGeneratorPage />} />
+              <Route path="/pdf-interpreter" element={<PdfInterpreterPage />} />
             </Routes>
           </main>
         </div>
