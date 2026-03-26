@@ -9,46 +9,44 @@ export interface ProcessResult {
   patientName: string;
   interpretation: string;
   fileName: string;
+  status: 'ready' | 'error';
+  error?: string;
 }
 
 export function usePdfInterpretation() {
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing]   = useState(false);
+  const [results, setResults]             = useState<ProcessResult[]>([]);
+  const [error, setError]                 = useState<string | null>(null);
 
-  const processPdf = async (
+  // ✅ Process a single PDF file — returns a result object, never throws
+  async function processSinglePdf(
     pdfFile: File,
     interpretations: PatientInterpretation[]
-  ): Promise<ProcessResult> => {
-    setIsProcessing(true);
-    setError(null);
-
+  ): Promise<ProcessResult> {
     try {
-      // ✅ Read file ONCE into Uint8Array — never gets detached unlike ArrayBuffer
+      // Read once into Uint8Array so we can make safe copies
       const uint8 = new Uint8Array(await pdfFile.arrayBuffer());
 
-      // Step 1 — Extract text (pass a copy so pdfjs can transfer it)
+      // Extract text using a copy (pdfjs detaches the buffer)
       const pdfData = await extractPdfText(uint8.buffer.slice(0));
 
       if (!pdfData.firstName && !pdfData.lastName) {
-        throw new Error(
-          'Could not find patient name in PDF. ' +
-          'Make sure the PDF has "Last name" and "First name" fields.'
-        );
+        throw new Error('Could not find patient name in this PDF');
       }
 
-      // Step 2 — Match
+      // Match interpretation
       const match = matchPatient(pdfData.firstName, pdfData.lastName, interpretations);
       if (!match) {
         const available = interpretations
           .map(p => `${p.firstName} ${p.lastName}`)
           .join(', ');
         throw new Error(
-          `No match found for "${pdfData.firstName} ${pdfData.lastName}".\n` +
+          `No match for "${pdfData.firstName} ${pdfData.lastName}". ` +
           `Available: ${available}`
         );
       }
 
-      // Step 3 — Write (pass another fresh copy — original uint8 is still intact)
+      // Write into PDF using another fresh copy
       const blob = await writeInterpretationToPdf(uint8.buffer.slice(0), match);
 
       return {
@@ -56,16 +54,59 @@ export function usePdfInterpretation() {
         patientName: `${pdfData.firstName} ${pdfData.lastName}`,
         interpretation: match.interpretation,
         fileName: pdfFile.name.replace(/\.pdf$/i, '') + '_interpreted.pdf',
+        status: 'ready',
       };
 
     } catch (err: any) {
-      const msg = err.message || 'Failed to process PDF';
-      setError(msg);
-      throw err;
-    } finally {
-      setIsProcessing(false);
+      return {
+        blob: new Blob(),
+        patientName: pdfFile.name,
+        interpretation: '',
+        fileName: pdfFile.name,
+        status: 'error',
+        error: err.message || 'Failed to process',
+      };
     }
+  }
+
+  // ✅ Process multiple PDFs one by one with live progress updates
+  const processAllPdfs = async (
+    pdfFiles: File[],
+    interpretations: PatientInterpretation[],
+    onProgress: (results: ProcessResult[]) => void
+  ): Promise<ProcessResult[]> => {
+    setIsProcessing(true);
+    setError(null);
+    setResults([]);
+
+    // Initialize all as pending
+    const pending: ProcessResult[] = pdfFiles.map(f => ({
+      blob: new Blob(),
+      patientName: f.name,
+      interpretation: '',
+      fileName: f.name,
+      status: 'error' as const,
+      error: 'Waiting...',
+    }));
+    onProgress([...pending]);
+
+    const final: ProcessResult[] = [];
+
+    for (let i = 0; i < pdfFiles.length; i++) {
+      // Mark current as processing
+      pending[i] = { ...pending[i], error: 'Processing...' };
+      onProgress([...pending]);
+
+      const result = await processSinglePdf(pdfFiles[i], interpretations);
+      pending[i] = result;
+      final.push(result);
+      onProgress([...pending]);
+    }
+
+    setResults(final);
+    setIsProcessing(false);
+    return final;
   };
 
-  return { processPdf, isProcessing, error, setError };
+  return { processAllPdfs, isProcessing, results, error, setError };
 }

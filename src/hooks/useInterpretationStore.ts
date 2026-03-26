@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserRole } from '@/hooks/useUserRole';
-import type { PatientInterpretation } from './usePdfInterpretation';
+import type { PatientInterpretation } from '@/utils/interpretationParser';
 
 export function useInterpretationStore() {
   const { user } = useAuth();
