@@ -12,6 +12,11 @@ interface Props {
 }
 
 export function JobCard({ job, isSaved, onSave, isSaving }: Props) {
+  // Treat "Not specified", "N/A", empty as no salary
+  const salary = job.salary && !['not specified', 'n/a', ''].includes(job.salary.toLowerCase().trim())
+    ? job.salary
+    : null;
+
   return (
     <div className={cn(
       'group flex flex-col h-full gap-4 p-6 rounded-3xl border bg-card transition-all duration-300 hover:shadow-2xl hover:-translate-y-1',
@@ -24,8 +29,10 @@ export function JobCard({ job, isSaved, onSave, isSaving }: Props) {
             {job.title}
           </h3>
           <div className="flex items-center gap-1.5 mt-2">
-            <Building2 className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-            <p className="text-sm font-medium text-muted-foreground truncate">{job.company}</p>
+            <Building2 className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+            <p className="text-sm font-medium text-muted-foreground truncate">
+              {job.company || 'Not disclosed'}
+            </p>
           </div>
         </div>
         <span className="flex-shrink-0 px-3 py-1 text-[10px] font-bold tracking-widest bg-blue-500/10 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400 rounded-2xl border border-blue-500/30">
@@ -33,24 +40,24 @@ export function JobCard({ job, isSaved, onSave, isSaving }: Props) {
         </span>
       </div>
 
-      {/* Meta Information */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3 text-sm flex-1">
+      {/* Meta Information — only render rows that have data */}
+      <div className="flex flex-col gap-2 text-sm flex-1">
         {job.location && (
           <div className="flex items-center gap-2 text-muted-foreground">
             <MapPin className="h-4 w-4 flex-shrink-0" />
             <span className="truncate">{job.location}</span>
           </div>
         )}
-        {job.salary && job.salary !== 'Not specified' && (
-          <div className="flex items-center gap-2 text-emerald-600 font-medium">
+        {salary && (
+          <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-medium">
             <DollarSign className="h-4 w-4 flex-shrink-0" />
-            <span className="truncate">{job.salary}</span>
+            <span className="truncate">{salary}</span>
           </div>
         )}
         {job.jobType && (
           <div className="flex items-center gap-2 text-muted-foreground">
             <Briefcase className="h-4 w-4 flex-shrink-0" />
-            <span className="capitalize">{job.jobType}</span>
+            <span>{job.jobType}</span>
           </div>
         )}
         {job.listedDate && (
@@ -68,7 +75,7 @@ export function JobCard({ job, isSaved, onSave, isSaving }: Props) {
         </p>
       )}
 
-      {/* Actions - Always aligned at bottom */}
+      {/* Actions */}
       <div className="flex gap-3 pt-4 mt-auto border-t border-border/30">
         <Button
           size="sm"
