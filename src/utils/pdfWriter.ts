@@ -13,7 +13,7 @@ interface TextItem {
 
 interface HeadingInfo {
   x: number;
-  y: number;        // pdf.js bottom-up
+  y: number;
   pageIndex: number;
   pageHeight: number;
   pageWidth: number;
@@ -47,7 +47,7 @@ async function extractAllTextItems(data: Uint8Array) {
   return { items, pageSizes };
 }
 
-/** Robust heading finder */
+/** Find Interpretation heading */
 function findInterpretationHeading(
   items: TextItem[],
   pageSizes: { width: number; height: number }[]
@@ -113,7 +113,7 @@ function wrapText(text: string, font: any, fontSize: number, maxWidth: number): 
   return lines;
 }
 
-/** FINAL FIXED MAIN FUNCTION */
+/** FINAL CORRECTED FUNCTION — Text placed directly under heading on same page */
 export async function writeInterpretationToPdf(
   originalBuffer: ArrayBuffer,
   interpretation: PatientInterpretation
@@ -131,7 +131,7 @@ export async function writeInterpretationToPdf(
   const leftMargin = 48;
   const rightMargin = 48;
   const bottomMargin = 65;
-  const gapBelowHeading = 18;   // ← tuned for clean spacing under heading
+  const gapBelowHeading = 22;   // clean gap under heading
 
   const pageWidth = heading?.pageWidth || pages[0].getWidth();
   const maxTextWidth = pageWidth - leftMargin - rightMargin;
@@ -139,14 +139,14 @@ export async function writeInterpretationToPdf(
   const lines = wrapText(interpretation.interpretation, font, fontSize, maxTextWidth);
 
   let targetPageIndex = 0;
-  let insertY = 0;   // pdf-lib Y (from bottom)
+  let insertY = 0;
 
   if (heading) {
-    // ✅ Place DIRECTLY under the heading on the SAME page
+    // Place text DIRECTLY under heading on the SAME page
     insertY = heading.y - gapBelowHeading;
     targetPageIndex = heading.pageIndex;
 
-    // Only move to next page if the text is truly too long to fit
+    // Only move to next page if text is too long to fit
     const totalTextHeight = lines.length * lineHeight;
     const availableSpace = insertY - bottomMargin;
 
