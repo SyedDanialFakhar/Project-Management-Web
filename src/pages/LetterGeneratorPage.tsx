@@ -3,14 +3,10 @@ import JSZip from 'jszip';
 import { FileText, ArrowLeft, Sparkles, History } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-
-import { useTemplateDetector, type TemplateType } from '@/hooks/useTemplateDetector';
 import { useLetterGenerator, type ExtractedLetterData } from '@/hooks/useLetterGenerator';
 import { useLetterSplitter } from '@/hooks/useLetterSplitter';
 import { useLetterHistory } from '@/hooks/useLetterHistory';
-
 import { downloadLetter, generateDocxBlob } from '@/hooks/useLetterDownload';
-
 import { LetterUploader } from '@/components/letter/LetterUploader';
 import { LetterStepIndicator } from '@/components/letter/LetterStepIndicator';
 import { LetterTranscriptPreview } from '@/components/letter/LetterTranscriptPreview';
@@ -25,54 +21,26 @@ type Step = 'input' | 'extracting' | 'review' | 'done' | 'batch_splitting' | 'ba
 type Tab  = 'generate' | 'history';
 
 export default function LetterGeneratorPage() {
-
-  // ✅ TEMPLATE SYSTEM
-  const templateMap: Record<TemplateType, string> = {
-    SARAH: 'LETTER_TEMPLATE_FINAL.docx',
-    SENTHURAN: 'LETTER_TEMPLATE_SENTHURAN.docx',
-  };
-
-  const AVAILABLE_TEMPLATES = [
-    { label: 'Dr Sarah Yeo', value: 'LETTER_TEMPLATE_FINAL.docx' },
-    { label: 'Dr Senthuran Shivakumar', value: 'LETTER_TEMPLATE_SENTHURAN.docx' },
-  ];
-
-  const [selectedTemplate, setSelectedTemplate] = useState<string>('LETTER_TEMPLATE_FINAL.docx');
-  const [detectedDoctor, setDetectedDoctor] = useState<TemplateType | null>(null);
-
-  const { detectDoctor } = useTemplateDetector();
-
-  const [step, setStep] = useState<Step>('input');
-  const [tab, setTab] = useState<Tab>('generate');
-  const [transcript, setTranscript] = useState('');
+  const [step, setStep]                     = useState<Step>('input');
+  const [tab, setTab]                       = useState<Tab>('generate');
+  const [transcript, setTranscript]         = useState('');
   const [transcriptName, setTranscriptName] = useState('');
-  const [data, setData] = useState<ExtractedLetterData | null>(null);
-  const [isDownloading, setIsDownloading] = useState(false);
-  const [batchLetters, setBatchLetters] = useState<BatchLetter[]>([]);
+  const [data, setData]                     = useState<ExtractedLetterData | null>(null);
+  const [isDownloading, setIsDownloading]   = useState(false);
+  const [batchLetters, setBatchLetters]     = useState<BatchLetter[]>([]);
   const [isDownloadingAll, setIsDownloadingAll] = useState(false);
   const [reviewingFromBatch, setReviewingFromBatch] = useState(false);
 
   const { extractAndGenerate, isGenerating, error } = useLetterGenerator();
-  const { splitTranscript } = useLetterSplitter();
+  const { splitTranscript }                          = useLetterSplitter();
   const { data: history = [], saveLetter, deleteLetter } = useLetterHistory();
 
-  // ✅ DETECTION
-  async function handleTranscriptLoaded(text: string, name: string) {
+  function handleTranscriptLoaded(text: string, name: string) {
     setTranscript(text);
     setTranscriptName(name);
     setStep('input');
     setBatchLetters([]);
     setReviewingFromBatch(false);
-
-    const doctorType = await detectDoctor(text);
-    setDetectedDoctor(doctorType);
-    setSelectedTemplate(templateMap[doctorType]);
-  }
-
-  function getDoctorLabel() {
-    if (detectedDoctor === 'SARAH') return 'Dr Sarah Yeo';
-    if (detectedDoctor === 'SENTHURAN') return 'Dr Senthuran Shivakumar';
-    return undefined;
   }
 
   function detectMultiplePatients(text: string): boolean {
@@ -81,55 +49,69 @@ export default function LetterGeneratorPage() {
       /please see this letter to dr/gi,
       /date of birth[,\s]+\d/gi,
     ];
-    return patterns.some(p => (text.match(p)?.length || 0) > 1);
+    for (const p of patterns) {
+      const matches = text.match(p);
+      if (matches && matches.length > 1) return true;
+    }
+    return false;
   }
 
   async function handleExtract() {
     if (!transcript) return;
-
+  
     const isMultiple = detectMultiplePatients(transcript);
-
+  
     if (isMultiple) {
       setStep('batch_splitting');
-
       try {
         const parts = await splitTranscript(transcript);
-
         const initial: BatchLetter[] = parts.map((part, i) => ({
           id: `letter-${i}`,
           transcriptPart: part,
           data: null,
           status: 'pending',
         }));
-
         setBatchLetters(initial);
-
+  
         const results = [...initial];
-
-        for (let i = 0; i < parts.length; i++) {
-          results[i] = { ...results[i], status: 'extracting' };
-          setBatchLetters([...results]);
-
-          try {
-            const extracted = await extractAndGenerate(parts[i]);
-            extracted.plan = [];
-            results[i] = { ...results[i], data: extracted, status: 'ready' };
-          } catch (err: any) {
-            results[i] = { ...results[i], status: 'error', error: err.message };
+        
+        // Process in parallel with concurrency limit
+        const concurrency = 3; // Process 3 at a time
+        
+        for (let i = 0; i < parts.length; i += concurrency) {
+          const batchIndices = Array.from(
+            { length: Math.min(concurrency, parts.length - i) },
+            (_, idx) => i + idx
+          );
+          
+          // Start all in this batch
+          for (const idx of batchIndices) {
+            results[idx] = { ...results[idx], status: 'extracting' };
           }
-
           setBatchLetters([...results]);
+          
+          // Process batch in parallel
+          const promises = batchIndices.map(async (idx) => {
+            try {
+              const extracted = await extractAndGenerate(parts[idx]);
+              extracted.plan = [];
+              results[idx] = { ...results[idx], data: extracted, status: 'ready' };
+            } catch (err: any) {
+              results[idx] = { ...results[idx], status: 'error', error: err.message };
+            }
+            // Update UI after each completes
+            setBatchLetters([...results]);
+          });
+          
+          await Promise.all(promises);
         }
-
+        
         setStep('batch_ready');
-
-      } catch {
+      } catch (err) {
         setStep('input');
       }
-
     } else {
       setStep('extracting');
-
       try {
         const result = await extractAndGenerate(transcript);
         result.plan = [];
@@ -141,27 +123,19 @@ export default function LetterGeneratorPage() {
     }
   }
 
-  // ✅ FIXED DOWNLOAD (TEMPLATE PASSED)
   async function handleDownload() {
     if (!data) return;
-
     setIsDownloading(true);
-
     try {
-      const cleanName = data.patientName.replace(/\s+/g, '_');
+      const cleanName = data.patientName
+        .replace(/^(Mr|Mrs|Ms|Dr|Miss)\.?\s*/i, '')
+        .trim().replace(/\s+/g, '_');
       const dateSlug = data.date.replace(/\s/g, '_').replace(/,/g, '');
-
-      await downloadLetter(
-        data,
-        `${cleanName}_${dateSlug}.docx`,
-        selectedTemplate // ✅ FIX
-      );
-
+      await downloadLetter(data, `${cleanName}_${dateSlug}.docx`);
       await saveLetter.mutateAsync(data);
       setStep('done');
-
     } catch (err: any) {
-      alert(err.message);
+      alert('Download failed: ' + err.message);
     } finally {
       setIsDownloading(false);
     }
@@ -169,40 +143,36 @@ export default function LetterGeneratorPage() {
 
   async function handleDownloadOne(letter: BatchLetter) {
     if (!letter.data) return;
-
-    await downloadLetter(
-      letter.data,
-      `${letter.data.patientName}.docx`,
-      selectedTemplate // ✅ FIX
-    );
-
+    const cleanName = letter.data.patientName
+      .replace(/^(Mr|Mrs|Ms|Dr|Miss)\.?\s*/i, '')
+      .trim().replace(/\s+/g, '_');
+    const dateSlug = letter.data.date.replace(/\s/g, '_').replace(/,/g, '');
+    await downloadLetter(letter.data, `${cleanName}_${dateSlug}.docx`);
     await saveLetter.mutateAsync(letter.data);
   }
 
   async function handleDownloadAll() {
     setIsDownloadingAll(true);
-
     try {
       const zip = new JSZip();
-
-      for (const letter of batchLetters) {
+      const readyLetters = batchLetters.filter(l => l.status === 'ready' && l.data);
+      for (const letter of readyLetters) {
         if (!letter.data) continue;
-
-        const blob = await generateDocxBlob(
-          letter.data,
-          selectedTemplate // ✅ FIX
-        );
-
-        zip.file(`${letter.data.patientName}.docx`, blob);
+        const blob = await generateDocxBlob(letter.data);
+        const cleanName = letter.data.patientName
+          .replace(/^(Mr|Mrs|Ms|Dr|Miss)\.?\s*/i, '')
+          .trim().replace(/\s+/g, '_');
+        const dateSlug = letter.data.date.replace(/\s/g, '_').replace(/,/g, '');
+        zip.file(`${cleanName}_${dateSlug}.docx`, blob);
+        await saveLetter.mutateAsync(letter.data);
       }
-
       const zipBlob = await zip.generateAsync({ type: 'blob' });
-
+      const url = URL.createObjectURL(zipBlob);
       const a = document.createElement('a');
-      a.href = URL.createObjectURL(zipBlob);
-      a.download = 'Letters.zip';
+      a.href = url;
+      a.download = `Letters_${new Date().toLocaleDateString('en-AU').replace(/\//g, '-')}.zip`;
       a.click();
-
+      URL.revokeObjectURL(url);
     } finally {
       setIsDownloadingAll(false);
     }
@@ -217,92 +187,178 @@ export default function LetterGeneratorPage() {
     setReviewingFromBatch(false);
   }
 
+  // ✅ Smart back button logic
   function handleBack() {
     if (step === 'review' && reviewingFromBatch) {
+      // ✅ Go back to batch list when reviewing from batch
       setStep('batch_ready');
       setReviewingFromBatch(false);
       setData(null);
+    } else if (step === 'done' && reviewingFromBatch) {
+      setStep('batch_ready');
+      setReviewingFromBatch(false);
     } else {
       handleReset();
     }
   }
 
   function handleOpenFromHistory(record: any) {
-    setData(record.extracted_data);
+    setData(record.extracted_data as ExtractedLetterData);
     setStep('review');
     setTab('generate');
+    setReviewingFromBatch(false);
   }
 
-  return (
-    <div className="flex flex-col h-full">
+  const showBackButton = tab === 'generate' && (
+    step === 'review' ||
+    step === 'done' ||
+    (step === 'input' && transcript) ||
+    step === 'batch_ready' ||
+    step === 'batch_splitting'
+  );
 
-      {/* HEADER */}
-      <div className="flex justify-between p-4 border-b">
-        <h1 className="flex items-center gap-2 font-bold">
-          <FileText className="h-4 w-4" />
-          Letter Generator
-        </h1>
+  // Back button label changes based on context
+  const backLabel = (step === 'review' || step === 'done') && reviewingFromBatch
+    ? 'All Letters'
+    : 'Back';
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden bg-background">
+
+      {/* Header */}
+      <div className="flex items-center justify-between px-6 py-4 border-b bg-background flex-shrink-0 gap-4">
+        <div className="flex items-center gap-3">
+          {showBackButton && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleBack}
+              className="gap-1.5 text-muted-foreground -ml-2"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              {backLabel}
+            </Button>
+          )}
+          <div>
+            <p className="text-xs font-semibold tracking-widest uppercase text-muted-foreground mb-0.5">Tools</p>
+            <h1 className="text-lg font-bold text-foreground flex items-center gap-2">
+              <FileText className="h-4 w-4 text-primary" />
+              Letter Generator
+            </h1>
+          </div>
+        </div>
+
+        {/* Step indicator — only for single letter flow */}
+        {tab === 'generate' && !['batch_splitting', 'batch_ready'].includes(step) && (
+          <LetterStepIndicator step={step} />
+        )}
+
+        {/* Batch indicator */}
+        {tab === 'generate' && ['batch_splitting', 'batch_ready'].includes(step) && (
+          <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-xs font-medium">
+            <FileText className="h-3 w-3" />
+            Batch Mode — {batchLetters.length} patients
+          </div>
+        )}
+
+        {/* Tabs */}
+        <div className="flex gap-1 p-1 bg-muted/40 rounded-xl border border-border/40">
+          {[
+            { id: 'generate', label: 'Generate', icon: Sparkles },
+            { id: 'history', label: history.length > 0 ? `History (${history.length})` : 'History', icon: History },
+          ].map(t => (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id as Tab)}
+              className={cn(
+                'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all',
+                tab === t.id
+                  ? 'bg-background text-foreground shadow-sm border border-border/40'
+                  : 'text-muted-foreground hover:text-foreground'
+              )}
+            >
+              <t.icon className="h-3 w-3" />
+              {t.label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* BODY */}
-      <div className="p-6">
+      {/* Body */}
+      <div className="flex-1 overflow-y-auto">
 
-        {step === 'input' && !transcript && (
-          <LetterUploader onTranscriptLoaded={handleTranscriptLoaded} />
-        )}
-
-        {step === 'input' && transcript && (
-          <LetterTranscriptPreview
-            transcript={transcript}
-            isExtracting={isGenerating}
-            onExtract={handleExtract}
-            onReset={handleReset}
+        {tab === 'history' && (
+          <LetterHistoryTab
+            history={history}
+            onOpen={handleOpenFromHistory}
+            onDelete={(id) => deleteLetter.mutate(id)}
           />
         )}
 
-        {step === 'extracting' && <LetterExtractingView />}
+        {tab === 'generate' && (
+          <div className="p-6 md:p-8 max-w-4xl mx-auto">
 
-        {step === 'batch_ready' && (
-          <BatchLetterList
-            letters={batchLetters}
-            selectedTemplate={selectedTemplate}
-            templates={AVAILABLE_TEMPLATES}
-            detectedDoctor={getDoctorLabel()}
-            onTemplateChange={setSelectedTemplate}
-            onDownloadOne={handleDownloadOne}
-            onDownloadAll={handleDownloadAll}
-            onReview={(letter) => {
-              setData(letter.data);
-              setReviewingFromBatch(true);
-              setStep('review');
-            }}
-            isDownloadingAll={isDownloadingAll}
-          />
-        )}
+            {error && (
+              <div className="mb-4 px-4 py-3 rounded-xl bg-destructive/10 border border-destructive/30 text-sm text-destructive">
+                ⚠️ {error}
+              </div>
+            )}
 
-        {step === 'review' && data && (
-          <LetterReviewView
-            data={data}
-            isDownloading={isDownloading}
-            hasTranscript={!!transcript}
-            selectedTemplate={selectedTemplate}
-            templates={AVAILABLE_TEMPLATES}
-            detectedDoctor={getDoctorLabel()}
-            onTemplateChange={setSelectedTemplate}
-            onChange={setData}
-            onDownload={handleDownload}
-            onReExtract={handleExtract}
-            onReset={handleReset}
-          />
-        )}
+            {step === 'input' && !transcript && (
+              <LetterUploader onTranscriptLoaded={handleTranscriptLoaded} />
+            )}
 
-        {step === 'done' && data && (
-          <LetterDoneView
-            patientName={data.patientName}
-            onBackToReview={() => setStep('review')}
-            onReset={handleReset}
-            onViewHistory={() => setTab('history')}
-          />
+            {step === 'input' && transcript && (
+              <LetterTranscriptPreview
+                transcript={transcript}
+                isExtracting={isGenerating}
+                onExtract={handleExtract}
+                onReset={handleReset}
+              />
+            )}
+
+            {step === 'extracting' && <LetterExtractingView />}
+
+            {step === 'batch_splitting' && (
+              <BatchSplittingView totalFound={batchLetters.length} />
+            )}
+
+            {step === 'batch_ready' && (
+              <BatchLetterList
+                letters={batchLetters}
+                onDownloadOne={handleDownloadOne}
+                onDownloadAll={handleDownloadAll}
+                onReview={(letter) => {
+                  setData(letter.data);
+                  setReviewingFromBatch(true);
+                  setStep('review');
+                }}
+                isDownloadingAll={isDownloadingAll}
+              />
+            )}
+
+            {step === 'review' && data && (
+              <LetterReviewView
+                data={data}
+                isDownloading={isDownloading}
+                hasTranscript={!!transcript && !reviewingFromBatch}
+                onChange={setData}
+                onDownload={handleDownload}
+                onReExtract={handleExtract}
+                onReset={handleReset}
+              />
+            )}
+
+            {step === 'done' && data && (
+              <LetterDoneView
+                patientName={data.patientName}
+                onBackToReview={() => setStep('review')}
+                onReset={handleReset}
+                onViewHistory={() => setTab('history')}
+              />
+            )}
+
+          </div>
         )}
       </div>
     </div>

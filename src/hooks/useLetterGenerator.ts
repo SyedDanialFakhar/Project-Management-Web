@@ -1,26 +1,39 @@
 import { useState } from 'react';
 import { withRetry, getCachedTranscript, setCachedTranscript } from '@/utils/aiHelpers';
+import { detectTemplate, type TemplateId } from '@/lib/templateRegistry';
 
 const MISTRAL_API_KEY = "hLpm8C7uDjlu6EFpc1UclJIVjgHB2jqh";
 if (!MISTRAL_API_KEY) {
-  console.error('VITE_MISTRAL_API_KEY is missing from .env file');
+  console.error('MISTRAL_API_KEY is missing');
 }
 
 export interface ExtractedLetterData {
+  // ── Template ──────────────────────────────────────────────
+  templateId: TemplateId;
+
+  // ── Referring Doctor ──────────────────────────────────────
   referringDoctorName: string;
   referringDoctorClinic: string;
   referringDoctorAddress: string;
+  salutation: string;
+
+  // ── Patient ───────────────────────────────────────────────
   patientName: string;
   patientDOB: string;
   patientContact: string;
   patientAddress: string;
   date: string;
-  salutation: string;
+
+  // ── Bullet sections (Sarah template only) ─────────────────
   pmhx: string[];
   medications: string[];
   allergies: string[];
   socialHistory: string[];
+
+  // ── Letter body ───────────────────────────────────────────
   body: string;
+
+  /** @deprecated kept for backwards compat — always [] */
   plan: string[];
 }
 
@@ -29,7 +42,6 @@ export function useLetterGenerator() {
   const [error, setError] = useState<string | null>(null);
 
   const extractAndGenerate = async (transcript: string): Promise<ExtractedLetterData> => {
-    // Check cache first
     const cached = getCachedTranscript(transcript);
     if (cached) return cached;
 
@@ -37,13 +49,30 @@ export function useLetterGenerator() {
     setError(null);
 
     try {
+      // ── 1. Detect which template / doctor this transcript belongs to ──
+      const template = detectTemplate(transcript);
+      const isSenthuran = template.id === 'senthuran';
+
       const today = new Date().toLocaleDateString('en-AU', {
         day: '2-digit', month: 'long', year: 'numeric',
       });
 
+      // ── 2. Build a template-specific prompt so the AI extracts the right fields ──
+      const bulletInstructions = isSenthuran
+        ? `// pmhx, medications, allergies, socialHistory are NOT used in this template.
+// Leave them as empty arrays.`
+        : `// Extract all bullet-point sections carefully.`;
+
+      const systemPrompt = isSenthuran
+        ? `You are a medical secretary for Dr Senthuran Shivakumar (Respiratory & Sleep Physician). 
+Extract structured data from the doctor's dictated transcript and return ONLY valid JSON with no extra text or markdown.
+The letter body should be a single flowing narrative paragraph — do NOT use bullet points in the body.`
+        : `You are a medical secretary for Dr Sarah Yeo (Respiratory & Sleep Specialist). 
+Extract structured data from the doctor's dictated transcript and return ONLY valid JSON with no extra text or markdown.`;
+
       const response = await withRetry(async () => {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 45000); // 45s timeout
+        const timeoutId = setTimeout(() => controller.abort(), 45000);
 
         try {
           const res = await fetch('https://api.mistral.ai/v1/chat/completions', {
@@ -53,41 +82,41 @@ export function useLetterGenerator() {
               'Authorization': `Bearer ${MISTRAL_API_KEY}`,
             },
             body: JSON.stringify({
-              model: 'mistral-small-latest', // Changed from large to small for speed
+              model: 'mistral-small-latest',
               temperature: 0.1,
-              max_tokens: 3000, // Reduced from 4000
+              max_tokens: 3000,
               messages: [
-                {
-                  role: 'system',
-                  content: 'You are a medical secretary. Extract structured data from a doctor\'s dictated transcript and return ONLY valid JSON with no extra text or markdown.',
-                },
+                { role: 'system', content: systemPrompt },
                 {
                   role: 'user',
                   content: `Extract all information from this medical dictation and return as JSON.
 
 Today's date if not specified: ${today}
+Doctor template: ${template.doctorName}
 
 Return EXACTLY this JSON structure:
 {
-  "referringDoctorName": "full name with title",
-  "referringDoctorClinic": "clinic name",
-  "referringDoctorAddress": "full address",
-  "patientName": "Mr/Ms/Mrs FirstName LastName",
+  "referringDoctorName": "full name with title e.g. Dr John Smith",
+  "referringDoctorClinic": "clinic or practice name",
+  "referringDoctorAddress": "full address on one line",
+  "patientName": "Title FirstName LastName e.g. Ms Yvonne Brown",
   "patientDOB": "DD/MM/YYYY",
-  "patientContact": "phone if mentioned",
-  "patientAddress": "address if mentioned",
-  "date": "Month DD, YYYY",
-  "salutation": "first name only",
-  "pmhx": ["condition 1"],
-  "medications": ["medication with dose"],
-  "allergies": ["allergy with reaction"],
-  "socialHistory": ["social point"],
-  "body": "Full professional medical letter body",
+  "patientContact": "phone number if mentioned, else empty string",
+  "patientAddress": "full address if mentioned, else empty string",
+  "date": "DD Month YYYY e.g. 19 February 2026",
+  "salutation": "first name only of the referring doctor",
+  "pmhx": [],
+  "medications": [],
+  "allergies": [],
+  "socialHistory": [],
+  "body": "Full professional medical letter body as a single flowing paragraph",
   "plan": []
 }
 
-TRANSCRIPT (truncated if needed):
-${transcript.slice(0, 6000)}`, // Truncate very long transcripts
+${bulletInstructions}
+
+TRANSCRIPT:
+${transcript.slice(0, 6000)}`,
                 },
               ],
             }),
@@ -109,17 +138,16 @@ ${transcript.slice(0, 6000)}`, // Truncate very long transcripts
 
       const cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
       const result = JSON.parse(cleaned) as ExtractedLetterData;
-      
-      // Ensure required fields exist
-      result.plan = result.plan || [];
+
+      // ── 3. Stamp the detected templateId onto the result ──
+      result.templateId = template.id;
+      result.plan = [];
       result.pmhx = result.pmhx || [];
       result.medications = result.medications || [];
       result.allergies = result.allergies || [];
       result.socialHistory = result.socialHistory || [];
 
-      // Cache the result
       setCachedTranscript(transcript, result);
-      
       return result;
 
     } catch (err: any) {

@@ -2,56 +2,38 @@ import { saveAs } from 'file-saver';
 import Docxtemplater from 'docxtemplater';
 import PizZip from 'pizzip';
 import type { ExtractedLetterData } from './useLetterGenerator';
+import { TEMPLATES, DEFAULT_TEMPLATE_ID } from '@/lib/templateRegistry';
 
-// Cache templates
-const templateCache: Record<string, ArrayBuffer> = {};
+// ── Template cache (one entry per template file) ──────────────────────────────
+const templateCache = new Map<string, ArrayBuffer>();
+const templatePromises = new Map<string, Promise<ArrayBuffer>>();
 
-async function getTemplate(filename: string): Promise<ArrayBuffer> {
-  if (templateCache[filename]) return templateCache[filename];
+async function getTemplate(filePath: string): Promise<ArrayBuffer> {
+  if (templateCache.has(filePath)) return templateCache.get(filePath)!;
+  if (templatePromises.has(filePath)) return templatePromises.get(filePath)!;
 
-  const res = await fetch(`/${filename}`);
-  if (!res.ok) throw new Error(`Template ${filename} not found`);
+  const promise = (async () => {
+    const res = await fetch(filePath);
+    if (!res.ok) throw new Error(`Template not found: ${filePath}`);
+    const buffer = await res.arrayBuffer();
+    templateCache.set(filePath, buffer);
+    templatePromises.delete(filePath);
+    return buffer;
+  })();
 
-  const buffer = await res.arrayBuffer();
-  templateCache[filename] = buffer;
-  return buffer;
+  templatePromises.set(filePath, promise);
+  return promise;
 }
 
-// ✅ BUILD PARAGRAPH FOR SENTHURAN
-function buildSenthuranBody(data: ExtractedLetterData) {
-  const parts: string[] = [];
+// ── Helpers ───────────────────────────────────────────────────────────────────
+const filterEmpty = (arr: string[]) => arr.filter((item) => item && item.trim());
 
-  if (data.body) parts.push(data.body.trim());
-
-  if (data.pmhx?.length) {
-    parts.push(`Past medical history includes ${data.pmhx.join(', ')}.`);
-  }
-
-  if (data.medications?.length) {
-    parts.push(`Medications include ${data.medications.join(', ')}.`);
-  }
-
-  if (data.allergies?.length) {
-    parts.push(`He has no known drug allergies.`);
-  }
-
-  if (data.socialHistory?.length) {
-    parts.push(`Social history: ${data.socialHistory.join(', ')}.`);
-  }
-
-  if (data.plan?.length) {
-    parts.push(`Plan is to ${data.plan.join(', ')}.`);
-  }
-
-  return parts.join('\n\n');
-}
-
-export async function generateDocxBlob(
-  data: ExtractedLetterData,
-  templateFilename: string
-): Promise<Blob> {
-
-  const buffer = await getTemplate(templateFilename);
+// ── Main blob generator ───────────────────────────────────────────────────────
+export async function generateDocxBlob(data: ExtractedLetterData): Promise<Blob> {
+  // Pick the right template file based on templateId (fall back to default)
+  const templateId = data.templateId ?? DEFAULT_TEMPLATE_ID;
+  const config = TEMPLATES[templateId] ?? TEMPLATES[DEFAULT_TEMPLATE_ID];
+  const buffer = await getTemplate(config.file);
 
   const zip = new PizZip(buffer);
   const doc = new Docxtemplater(zip, {
@@ -59,47 +41,48 @@ export async function generateDocxBlob(
     linebreaks: true,
   });
 
-  const isSenthuran = templateFilename.includes('SENTHURAN');
-
-  const filterEmpty = (arr: string[]) =>
-    arr.filter(item => item && item.trim());
-
-  doc.render({
-    referringDoctorName: data.referringDoctorName || '',
-    referringDoctorClinic: data.referringDoctorClinic || '',
-    referringDoctorAddress: data.referringDoctorAddress || '',
-    date: data.date || '',
-    patientName: data.patientName || '',
-    patientDOB: data.patientDOB || '',
-    patientContact: data.patientContact || '',
-    patientAddress: data.patientAddress || '',
-    salutation: data.salutation || '',
-
-    // ✅ KEY CHANGE
-    body: isSenthuran
-      ? buildSenthuranBody(data)
-      : data.body || '',
-
-    // Only used in Sarah template
-    pmhx: filterEmpty(data.pmhx || []).map(item => ({ item })),
-    medications: filterEmpty(data.medications || []).map(item => ({ item })),
-    allergies: filterEmpty(data.allergies || []).map(item => ({ item })),
-    socialHistory: filterEmpty(data.socialHistory || []).map(item => ({ item })),
-    plan: filterEmpty(data.plan || []).map(item => ({ item })),
-  });
+  if (templateId === 'senthuran') {
+    // ── Dr Senthuran's template: simple flat fields only ──────────────────────
+    doc.render({
+      referringDoctorName:    data.referringDoctorName    || '',
+      referringDoctorClinic:  data.referringDoctorClinic  || '',
+      referringDoctorAddress: data.referringDoctorAddress || '',
+      date:                   data.date                   || '',
+      patientName:            data.patientName            || '',
+      patientDOB:             data.patientDOB             || '',
+      patientContact:         data.patientContact         || '',
+      patientAddress:         data.patientAddress         || '',
+      salutation:             data.salutation             || '',
+      body:                   data.body                   || '',
+    });
+  } else {
+    // ── Dr Sarah's template: includes bullet-list loop sections ───────────────
+    doc.render({
+      referringDoctorName:    data.referringDoctorName    || '',
+      referringDoctorClinic:  data.referringDoctorClinic  || '',
+      referringDoctorAddress: data.referringDoctorAddress || '',
+      date:                   data.date                   || '',
+      patientName:            data.patientName            || '',
+      patientDOB:             data.patientDOB             || '',
+      patientContact:         data.patientContact         || '',
+      patientAddress:         data.patientAddress         || '',
+      salutation:             data.salutation             || '',
+      pmhx:          filterEmpty(data.pmhx          || []).map((item) => ({ item: item.trim() })),
+      medications:   filterEmpty(data.medications   || []).map((item) => ({ item: item.trim() })),
+      allergies:     filterEmpty(data.allergies     || []).map((item) => ({ item: item.trim() })),
+      socialHistory: filterEmpty(data.socialHistory || []).map((item) => ({ item: item.trim() })),
+      body:          data.body || '',
+    });
+  }
 
   return doc.getZip().generate({
     type: 'blob',
-    mimeType:
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   });
 }
 
-export async function downloadLetter(
-  data: ExtractedLetterData,
-  fileName: string,
-  templateFilename: string
-) {
-  const blob = await generateDocxBlob(data, templateFilename);
+// ── Download helper ───────────────────────────────────────────────────────────
+export async function downloadLetter(data: ExtractedLetterData, fileName: string) {
+  const blob = await generateDocxBlob(data);
   saveAs(blob, fileName);
 }

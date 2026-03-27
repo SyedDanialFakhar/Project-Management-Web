@@ -1,5 +1,6 @@
 import type { ExtractedLetterData } from '@/hooks/useLetterGenerator';
-import { User, Stethoscope, Pill, AlertCircle, Users, FileText } from 'lucide-react';
+import { TEMPLATES } from '@/lib/templateRegistry';
+import { User, Stethoscope, Pill, AlertCircle, Users, FileText, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface LetterDataPreviewProps {
@@ -32,23 +33,20 @@ function BulletField({ label, items, icon: Icon, color, onChange }: {
   onChange: (items: string[]) => void;
 }) {
   function handleChange(index: number, value: string) {
-    // ✅ If user presses Enter (newline) — split into multiple items
     if (value.includes('\n')) {
       const parts = value
         .split('\n')
-        .map(p => p.replace(/^[\-–•*,]+\s*/, '').trim())
+        .map((p) => p.replace(/^[\-–•*,]+\s*/, '').trim())
         .filter(Boolean);
       const updated = [...items];
       updated.splice(index, 1, ...parts);
       onChange(updated);
       return;
     }
-
-    // ✅ If user pastes comma separated — split into multiple items
     if (value.includes(',') && value.split(',').length > 1) {
       const parts = value
         .split(',')
-        .map(p => p.replace(/^[\-–•*]+\s*/, '').trim())
+        .map((p) => p.replace(/^[\-–•*]+\s*/, '').trim())
         .filter(Boolean);
       if (parts.length > 1) {
         const updated = [...items];
@@ -57,38 +55,29 @@ function BulletField({ label, items, icon: Icon, color, onChange }: {
         return;
       }
     }
-
-    // Normal single item update — strip leading dash if typed
     const updated = [...items];
     updated[index] = value.replace(/^[\-–•*]+\s*/, '');
     onChange(updated);
   }
 
   function handleKeyDown(index: number, e: React.KeyboardEvent<HTMLInputElement>) {
-    // ✅ Enter — add new bullet below
     if (e.key === 'Enter') {
       e.preventDefault();
       const updated = [...items];
       updated.splice(index + 1, 0, '');
       onChange(updated);
       setTimeout(() => {
-        const inputs = document.querySelectorAll(
-          `[data-bullet-group="${label}"] input`
-        );
+        const inputs = document.querySelectorAll(`[data-bullet-group="${label}"] input`);
         const next = inputs[index + 1] as HTMLInputElement;
         if (next) next.focus();
       }, 50);
     }
-
-    // ✅ Backspace on empty item — remove and go up
     if (e.key === 'Backspace' && items[index] === '' && items.length > 1) {
       e.preventDefault();
       const updated = items.filter((_, i) => i !== index);
       onChange(updated);
       setTimeout(() => {
-        const inputs = document.querySelectorAll(
-          `[data-bullet-group="${label}"] input`
-        );
+        const inputs = document.querySelectorAll(`[data-bullet-group="${label}"] input`);
         const prev = inputs[Math.max(0, index - 1)] as HTMLInputElement;
         if (prev) prev.focus();
       }, 50);
@@ -96,7 +85,6 @@ function BulletField({ label, items, icon: Icon, color, onChange }: {
   }
 
   function handleBlur(index: number, value: string) {
-    // ✅ Clean on blur — strip leading dashes/bullets user may have typed
     const updated = [...items];
     updated[index] = value.replace(/^[\-–•*\d.]+\s*/, '').trim();
     onChange(updated);
@@ -113,10 +101,8 @@ function BulletField({ label, items, icon: Icon, color, onChange }: {
           Enter to add · Backspace to remove
         </span>
       </div>
-
       {items.map((item, i) => (
         <div key={i} className="flex items-center gap-2">
-          {/* Dash prefix — matches letter format exactly */}
           <span className="text-muted-foreground text-xs font-mono flex-shrink-0 select-none w-3">-</span>
           <input
             value={item}
@@ -136,7 +122,6 @@ function BulletField({ label, items, icon: Icon, color, onChange }: {
           )}
         </div>
       ))}
-
       <button
         onClick={() => onChange([...items, ''])}
         className="text-xs text-primary hover:opacity-80 transition-opacity flex items-center gap-1 mt-1"
@@ -151,8 +136,21 @@ export function LetterDataPreview({ data, onChange }: LetterDataPreviewProps) {
   const update = (key: keyof ExtractedLetterData, val: any) =>
     onChange({ ...data, [key]: val });
 
+  const templateId = data.templateId ?? 'sarah';
+  const config = TEMPLATES[templateId] ?? TEMPLATES['sarah'];
+  const showBullets = config.hasBulletSections;
+
   return (
     <div className="space-y-4">
+
+      {/* Template badge */}
+      <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/5 border border-primary/20 w-fit">
+        <Sparkles className="h-3 w-3 text-primary" />
+        <p className="text-[11px] font-medium text-primary">
+          Template: {config.doctorName}
+        </p>
+      </div>
+
       <p className="text-xs text-muted-foreground">
         Review and edit the extracted data before downloading.
       </p>
@@ -166,26 +164,10 @@ export function LetterDataPreview({ data, onChange }: LetterDataPreviewProps) {
           </p>
         </div>
         <div className="grid grid-cols-1 gap-2">
-          <Field
-            label="Name"
-            value={data.referringDoctorName}
-            onChange={v => update('referringDoctorName', v)}
-          />
-          <Field
-            label="Clinic"
-            value={data.referringDoctorClinic}
-            onChange={v => update('referringDoctorClinic', v)}
-          />
-          <Field
-            label="Address"
-            value={data.referringDoctorAddress}
-            onChange={v => update('referringDoctorAddress', v)}
-          />
-          <Field
-            label="Salutation (first name only)"
-            value={data.salutation}
-            onChange={v => update('salutation', v)}
-          />
+          <Field label="Name" value={data.referringDoctorName} onChange={(v) => update('referringDoctorName', v)} />
+          <Field label="Clinic" value={data.referringDoctorClinic} onChange={(v) => update('referringDoctorClinic', v)} />
+          <Field label="Address" value={data.referringDoctorAddress} onChange={(v) => update('referringDoctorAddress', v)} />
+          <Field label="Salutation (first name only)" value={data.salutation} onChange={(v) => update('salutation', v)} />
         </div>
       </div>
 
@@ -198,69 +180,47 @@ export function LetterDataPreview({ data, onChange }: LetterDataPreviewProps) {
           </p>
         </div>
         <div className="grid grid-cols-2 gap-2">
-          <Field
-            label="Full Name"
-            value={data.patientName}
-            onChange={v => update('patientName', v)}
-          />
-          <Field
-            label="Date of Birth"
-            value={data.patientDOB}
-            onChange={v => update('patientDOB', v)}
-          />
-          <Field
-            label="Contact"
-            value={data.patientContact}
-            onChange={v => update('patientContact', v)}
-          />
-          <Field
-            label="Date of Letter"
-            value={data.date}
-            onChange={v => update('date', v)}
-          />
+          <Field label="Full Name" value={data.patientName} onChange={(v) => update('patientName', v)} />
+          <Field label="Date of Birth" value={data.patientDOB} onChange={(v) => update('patientDOB', v)} />
+          <Field label="Contact" value={data.patientContact} onChange={(v) => update('patientContact', v)} />
+          <Field label="Date of Letter" value={data.date} onChange={(v) => update('date', v)} />
         </div>
-        <Field
-          label="Address"
-          value={data.patientAddress}
-          onChange={v => update('patientAddress', v)}
-        />
+        <Field label="Address" value={data.patientAddress} onChange={(v) => update('patientAddress', v)} />
       </div>
 
-      {/* PMHx */}
-      <BulletField
-        label="PMHx"
-        items={data.pmhx}
-        icon={FileText}
-        color="border-border/40 bg-muted/10"
-        onChange={v => update('pmhx', v)}
-      />
-
-      {/* Medications */}
-      <BulletField
-        label="Medications"
-        items={data.medications}
-        icon={Pill}
-        color="border-border/40 bg-muted/10"
-        onChange={v => update('medications', v)}
-      />
-
-      {/* Allergies */}
-      <BulletField
-        label="Allergies"
-        items={data.allergies}
-        icon={AlertCircle}
-        color="border-amber-500/20 bg-amber-500/5"
-        onChange={v => update('allergies', v)}
-      />
-
-      {/* Social History */}
-      <BulletField
-        label="Social History"
-        items={data.socialHistory}
-        icon={Users}
-        color="border-border/40 bg-muted/10"
-        onChange={v => update('socialHistory', v)}
-      />
+      {/* Bullet sections — only for Sarah's template */}
+      {showBullets && (
+        <>
+          <BulletField
+            label="PMHx"
+            items={data.pmhx}
+            icon={FileText}
+            color="border-border/40 bg-muted/10"
+            onChange={(v) => update('pmhx', v)}
+          />
+          <BulletField
+            label="Medications"
+            items={data.medications}
+            icon={Pill}
+            color="border-border/40 bg-muted/10"
+            onChange={(v) => update('medications', v)}
+          />
+          <BulletField
+            label="Allergies"
+            items={data.allergies}
+            icon={AlertCircle}
+            color="border-amber-500/20 bg-amber-500/5"
+            onChange={(v) => update('allergies', v)}
+          />
+          <BulletField
+            label="Social History"
+            items={data.socialHistory}
+            icon={Users}
+            color="border-border/40 bg-muted/10"
+            onChange={(v) => update('socialHistory', v)}
+          />
+        </>
+      )}
 
       {/* Letter Body */}
       <div className="space-y-1">
