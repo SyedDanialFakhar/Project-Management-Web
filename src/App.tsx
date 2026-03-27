@@ -4,6 +4,7 @@ import { Toaster as Sonner } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/AppSidebar';
+import SeekLeadsPage from './pages/SeekLeadsPage';
 import { useAuth } from '@/hooks/useAuth';
 import AuthPage from './pages/AuthPage';
 import Index from './pages/Index';
@@ -89,6 +90,7 @@ function AppLayout() {
               <Route path="/admin" element={<AdminPage />} />
               <Route path="/letters" element={<LetterGeneratorPage />} />
               <Route path="/pdf-interpreter" element={<PdfInterpreterPage />} />
+              <Route path="/seek-leads" element={<SeekLeadsPage />} />
             </Routes>
           </main>
         </div>

@@ -3,6 +3,7 @@ import { NavLink } from '@/components/NavLink';
 import { FileText } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { FileScan } from 'lucide-react';
+import { Briefcase } from 'lucide-react';
 import { Mail } from 'lucide-react';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useUserRole } from '@/hooks/useUserRole';
@@ -34,6 +35,7 @@ export function AppSidebar({ onSignOut }: AppSidebarProps) {
     { title: 'Documents', url: '/document', icon: FileText },
     { title: 'Letter Generator', url: '/letters', icon: Mail },
     { title: 'PDF Interpreter', url: '/pdf-interpreter', icon: FileScan },
+    { title: 'SEEK Leads', url: '/seek-leads', icon: Briefcase },
     ...(!isEmployee ? [{ title: 'Analytics', url: '/analytics', icon: LayoutDashboard }] : []),
   ];
 
