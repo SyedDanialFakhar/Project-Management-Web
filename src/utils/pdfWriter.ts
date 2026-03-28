@@ -1,202 +1,176 @@
 // utils/pdfWriter.ts
+//
+// Writes interpretation text directly under the "Interpretation" heading.
+// ALWAYS targets page 1 (index 0) — that is where the heading always lives.
+// Does NOT use pdfjs at all (pdfjs has a bug where it reports page-1 text
+// as belonging to page 2 in multi-page PDFs, which was causing the text to
+// land on the wrong page every time).
+//
+// Instead, we scan the raw PDF content stream bytes of page 1 to find the
+// Y coordinate of the "Interpretation" text, then draw directly below it.
+
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
-import { pdfjs } from '@/lib/pdfWorker';
 import type { PatientInterpretation } from '@/types/pdfInterpretation';
 
-interface TextItem {
-  text: string;
-  x: number;
-  y: number;        // pdf.js = distance from BOTTOM of page
-  pageIndex: number;
-  fontSize: number;
-}
+// ─── Find the Y of "Interpretation" by scanning raw page bytes ───────────────
+//
+// PDF text drawing looks like this in the content stream:
+//   ... <number> <number> Td   or   <matrix> Tm
+//   (Interpretation) Tj
+//
+// We search for the byte sequence "(Interpretation" and then walk backwards
+// to find the preceding Tm or Td y-value.
+// pdf-lib y = distance from BOTTOM of page, increasing upward.
 
-interface HeadingInfo {
-  x: number;
-  y: number;
-  pageIndex: number;
-  pageHeight: number;
-  pageWidth: number;
-  fontSize: number;
-}
+function findInterpretationY(page: ReturnType<PDFDocument['getPage']>): number | null {
+  try {
+    // Get raw content stream bytes as a string for regex scanning
+    const contentStreams = (page as any).node.Contents();
+    if (!contentStreams) return null;
 
-/** Extract all text with coordinates */
-async function extractAllTextItems(data: Uint8Array) {
-  const pdf = await pdfjs.getDocument({ data: data.slice() }).promise;
-  const items: TextItem[] = [];
-  const pageSizes: { width: number; height: number }[] = [];
+    // Collect all content stream bytes
+    let raw = '';
+    const collectStream = (obj: any) => {
+      try {
+        if (obj && typeof obj.getContents === 'function') {
+          const bytes = obj.getContents();
+          raw += new TextDecoder('latin1').decode(bytes);
+        } else if (obj && typeof obj.asArray === 'function') {
+          for (const item of obj.asArray()) collectStream(item);
+        }
+      } catch { /* skip unreadable streams */ }
+    };
+    collectStream(contentStreams);
 
-  for (let p = 1; p <= pdf.numPages; p++) {
-    const page = await pdf.getPage(p);
-    const viewport = page.getViewport({ scale: 1 });
-    const content = await page.getTextContent();
+    if (!raw) return null;
 
-    pageSizes.push({ width: viewport.width, height: viewport.height });
+    // Match patterns like:
+    //   96.693 Tf ... BT ... tx ty Tm ... (Interpretation) Tj
+    // We look for "Interpretation" as a PDF string literal and grab
+    // the most recent Tm [a b c d tx ty] before it.
 
-    for (const item of content.items as any[]) {
-      if (!item.str?.trim()) continue;
-      items.push({
-        text: item.str,
-        x: item.transform[4],
-        y: item.transform[5],
-        pageIndex: p - 1,
-        fontSize: item.height || 10,
-      });
+    // Find all Tm commands and their positions in the stream
+    const tmRegex = /(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+Tm/g;
+    const tmMatches: { index: number; ty: number }[] = [];
+    let m: RegExpExecArray | null;
+    while ((m = tmRegex.exec(raw)) !== null) {
+      tmMatches.push({ index: m.index, ty: parseFloat(m[6]) });
     }
+
+    // Find "Interpretation" as a PDF string — it appears as (Interpretation) or
+    // as part of a TJ array like [(Interpretation)]
+    const interpRegex = /\(Interpretation[\s:)]/g;
+    const interpMatches: number[] = [];
+    while ((m = interpRegex.exec(raw)) !== null) {
+      interpMatches.push(m.index);
+    }
+
+    if (interpMatches.length === 0 || tmMatches.length === 0) return null;
+
+    // For the first "Interpretation" occurrence, find the last Tm before it
+    const interpPos = interpMatches[0];
+    let closestTm: { index: number; ty: number } | null = null;
+    for (const tm of tmMatches) {
+      if (tm.index < interpPos) closestTm = tm;
+      else break;
+    }
+
+    return closestTm?.ty ?? null;
+  } catch {
+    return null;
   }
-  return { items, pageSizes };
 }
 
-/** Find Interpretation heading */
-function findInterpretationHeading(
-  items: TextItem[],
-  pageSizes: { width: number; height: number }[]
-): HeadingInfo | null {
-  const variants = [
-    'interpretation',
-    'interpretation:',
-    'interpretations',
-    'INTERPRETATION',
-    'Interpretation'
-  ];
+// ─── Wrap text ────────────────────────────────────────────────────────────────
 
-  for (let pageIdx = 0; pageIdx < pageSizes.length; pageIdx++) {
-    const pageItems = items.filter(i => i.pageIndex === pageIdx);
-
-    const lineMap = new Map<number, TextItem[]>();
-    for (const item of pageItems) {
-      const roundedY = Math.round(item.y / 3) * 3;
-      if (!lineMap.has(roundedY)) lineMap.set(roundedY, []);
-      lineMap.get(roundedY)!.push(item);
-    }
-
-    for (const [y, lineItems] of lineMap) {
-      const lineText = lineItems
-        .sort((a, b) => a.x - b.x)
-        .map(i => i.text.trim())
-        .join(' ')
-        .trim()
-        .toLowerCase();
-
-      if (variants.some(v => lineText === v || lineText.startsWith(v))) {
-        const firstItem = lineItems[0];
-        return {
-          x: firstItem.x,
-          y: y,
-          pageIndex: pageIdx,
-          pageHeight: pageSizes[pageIdx].height,
-          pageWidth: pageSizes[pageIdx].width,
-          fontSize: firstItem.fontSize,
-        };
+function wrapText(
+  text: string,
+  font: Awaited<ReturnType<PDFDocument['embedFont']>>,
+  fontSize: number,
+  maxWidth: number
+): string[] {
+  const lines: string[] = [];
+  for (const paragraph of text.split(/\n+/)) {
+    const words = paragraph.split(/\s+/).filter(Boolean);
+    if (!words.length) continue;
+    let current = '';
+    for (const word of words) {
+      const test = current ? `${current} ${word}` : word;
+      if (current && font.widthOfTextAtSize(test, fontSize) > maxWidth) {
+        lines.push(current);
+        current = word;
+      } else {
+        current = test;
       }
     }
+    if (current) lines.push(current);
   }
-  return null;
-}
-
-/** Wrap text */
-function wrapText(text: string, font: any, fontSize: number, maxWidth: number): string[] {
-  const words = text.split(/\s+/).filter(Boolean);
-  const lines: string[] = [];
-  let current = '';
-
-  for (const word of words) {
-    const test = current ? `${current} ${word}` : word;
-    if (font.widthOfTextAtSize(test, fontSize) > maxWidth && current) {
-      lines.push(current);
-      current = word;
-    } else {
-      current = test;
-    }
-  }
-  if (current) lines.push(current);
   return lines;
 }
 
-/** FINAL CORRECTED FUNCTION — Text placed directly under heading on same page */
+// ─── Main export ──────────────────────────────────────────────────────────────
+
 export async function writeInterpretationToPdf(
   originalBuffer: ArrayBuffer,
   interpretation: PatientInterpretation
 ): Promise<Blob> {
-  const uint8 = new Uint8Array(originalBuffer);
-  const { items, pageSizes } = await extractAllTextItems(uint8);
+  const pdfDoc = await PDFDocument.load(new Uint8Array(originalBuffer), {
+    ignoreEncryption: true,
+  });
 
-  const heading = findInterpretationHeading(items, pageSizes);
-
-  const pdfDoc = await PDFDocument.load(uint8, { ignoreEncryption: true });
-  const pages = pdfDoc.getPages();
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-  const fontSize = 9.5;
-  const lineHeight = 13.5;
-  const leftMargin = 48;
-  const rightMargin = 48;
-  const bottomMargin = 65;
-  const gapBelowHeading = 22;   // clean gap under heading
 
-  const pageWidth = heading?.pageWidth || pages[0].getWidth();
-  const maxTextWidth = pageWidth - leftMargin - rightMargin;
+  const FONT_SIZE    = 9.5;
+  const LINE_HEIGHT  = 13.5;
+  const LEFT_MARGIN  = 59;
+  const RIGHT_MARGIN = 48;
+  const FOOTER_SAFE  = 55;   // never draw below this y on page 1
+  const GAP          = 4;    // pt between heading baseline and first text line
 
-  const lines = wrapText(interpretation.interpretation, font, fontSize, maxTextWidth);
+  // ALWAYS use page 1 (index 0) — the heading is always there
+  const page      = pdfDoc.getPages()[0];
+  const pageW     = page.getWidth();
+  const pageH     = page.getHeight();
+  const maxWidth  = pageW - LEFT_MARGIN - RIGHT_MARGIN;
+  const lines     = wrapText(interpretation.interpretation, font, FONT_SIZE, maxWidth);
 
-  let targetPageIndex = 0;
-  let insertY = 0;
+  // Try to find the exact Y of the heading from the raw content stream
+  let headingY = findInterpretationY(page);
 
-  if (heading) {
-    // Place text DIRECTLY under heading on the SAME page
-    insertY = heading.y - gapBelowHeading;
-    targetPageIndex = heading.pageIndex;
+  // Fallback: known Y values from measuring all current GANSHORN report types
+  // Type A (1-page spiro + DLCO):   heading at pdf-lib y ≈ 132
+  // Type B (2-page mannitol):       heading at pdf-lib y ≈ 97
+  // Type C (1-page Griffith):       heading at pdf-lib y ≈ 125
+  // We pick the lower of the known values as a safe fallback so we never
+  // overshoot above the heading itself.
+  if (headingY === null || headingY < 50 || headingY > 400) {
+    // Unknown — place text at a safe conservative position
+    headingY = 97;
+  }
 
-    // Only move to next page if text is too long to fit
-    const totalTextHeight = lines.length * lineHeight;
-    const availableSpace = insertY - bottomMargin;
+  // First text line starts just below the heading baseline
+  const startY    = headingY - GAP - FONT_SIZE;
+  const lastLineY = startY - (lines.length - 1) * LINE_HEIGHT;
 
-    if (totalTextHeight > availableSpace) {
-      targetPageIndex = heading.pageIndex + 1;
-      if (targetPageIndex < pages.length) {
-        insertY = pages[targetPageIndex].getHeight() - 100;
-      } else {
-        const newPage = pdfDoc.addPage([pageWidth, heading.pageHeight]);
-        pages.push(newPage);
-        targetPageIndex = pages.length - 1;
-        insertY = newPage.getHeight() - 100;
-      }
+  if (lastLineY >= FOOTER_SAFE) {
+    // ✅ All lines fit on page 1 below the heading
+    let y = startY;
+    for (const line of lines) {
+      page.drawText(line, { x: LEFT_MARGIN, y, size: FONT_SIZE, font, color: rgb(0, 0, 0) });
+      y -= LINE_HEIGHT;
     }
   } else {
-    // Fallback
-    targetPageIndex = pages.length - 1;
-    insertY = pages[targetPageIndex].getHeight() - 140;
-  }
-
-  // Ensure page exists
-  while (targetPageIndex >= pages.length) {
-    const newPage = pdfDoc.addPage([pageWidth, pages[0].getHeight()]);
-    pages.push(newPage);
-  }
-
-  const page = pages[targetPageIndex];
-  let y = insertY;
-
-  // Draw the text
-  for (const line of lines) {
-    if (y < bottomMargin) {
-      const newPage = pdfDoc.addPage([pageWidth, pages[0].getHeight()]);
-      pages.push(newPage);
-      const newIndex = pages.length - 1;
-      y = pages[newIndex].getHeight() - 100;
-      page = pages[newIndex];
+    // ❌ Not enough room — insert a blank page immediately after page 1
+    // (page 2 and beyond, e.g. mannitol tables, shift to page 3+)
+    pdfDoc.insertPage(1, [pageW, pageH]);
+    const newPage = pdfDoc.getPages()[1];
+    let y = pageH - 72;
+    for (const line of lines) {
+      newPage.drawText(line, { x: LEFT_MARGIN, y, size: FONT_SIZE, font, color: rgb(0, 0, 0) });
+      y -= LINE_HEIGHT;
     }
-
-    page.drawText(line, {
-      x: leftMargin,
-      y: y,
-      size: fontSize,
-      font,
-      color: rgb(0, 0, 0),
-    });
-
-    y -= lineHeight;
   }
 
   const bytes = await pdfDoc.save();
-  return new Blob([bytes], { type: 'application/pdf' });
+  return new Blob([bytes.buffer as ArrayBuffer], { type: 'application/pdf' });
 }
