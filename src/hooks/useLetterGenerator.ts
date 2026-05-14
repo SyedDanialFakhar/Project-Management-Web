@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { withRetry, getCachedTranscript, setCachedTranscript } from '@/utils/aiHelpers';
 import { detectTemplate, type TemplateId } from '@/lib/templateRegistry';
 
-const MISTRAL_API_KEY = "hLpm8C7uDjlu6EFpc1UclJIVjgHB2jqh";
+const MISTRAL_API_KEY = "pLdbI20jdKtRkwYtKZIPf0FyL9IO1pVq";
 if (!MISTRAL_API_KEY) {
   console.error('MISTRAL_API_KEY is missing');
 }
